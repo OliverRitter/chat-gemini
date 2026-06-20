@@ -22,6 +22,7 @@ interface SidebarItem {
   name: string;
   isUser?: boolean;
 }
+const EMPTY_MESSAGES_ARRAY: any[] = [];
 
 export default function ChatDashboardPage() {
   useSocketSync();
@@ -46,10 +47,19 @@ export default function ChatDashboardPage() {
 }
 
 function ConnectedWorkspace({ session }: { session: any }) {
+  const [currentPage, setCurrentPage] = useState(0);
+  const [hasMoreMessages, setHasMoreMessages] = useState(true);
+  const topSentinelRef = useRef<HTMLDivElement | null>(null);
   const activeChannelId = useChatStore((state) => state.activeChannelId);
   const messagesByChannel = useChatStore((state) => state.messagesByChannel);
   const setActiveChannel = useChatStore((state) => state.setActiveChannel);
   const setInitialMessages = useChatStore((state) => state.setInitialMessages);
+
+  const currentChannelMessages = useChatStore((state: any) =>
+    state.activeChannelId
+      ? state.messagesByChannel[state.activeChannelId] || EMPTY_MESSAGES_ARRAY
+      : EMPTY_MESSAGES_ARRAY,
+  );
 
   const { unreadCounts, clearUnread } = useNotificationStore();
 
@@ -57,6 +67,90 @@ function ConnectedWorkspace({ session }: { session: any }) {
   const [usersList, setUsersList] = useState<SidebarItem[]>([]);
   const [activeRoomTitle, setActiveRoomTitle] = useState("");
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+  // Inside function ConnectedWorkspace({ session }) inside src/app/chat/page.tsx:
+
+  // 🚀 TRUE CONCURRENT THROTTLE FLAG: Prevents overlapping network calls
+  const isFetchingHistory = useRef(false);
+  const isRoomLoading = useRef<string | null>(null);
+
+  // Inside function ConnectedWorkspace({ session }) { ... in src/app/chat/page.tsx
+
+  // 🚀 ATOMIC MUTATION LOCK: Strictly prevents parallel historical over-fetches
+  const isFetchingPage = useRef(false);
+
+  useEffect(() => {
+    // Guard Clause: Block observation loops if we run out of database rows or are loading a new room
+    if (
+      !activeChannelId ||
+      !hasMoreMessages ||
+      currentChannelMessages.length === 0
+    )
+      return;
+
+    const observer = new IntersectionObserver(
+      async (entries) => {
+        const firstEntry = entries[0];
+        const container = containerRef.current;
+
+        // 🚀 THE SENIOR-GRADE BOUNDARY GATEWAY:
+        // Trigger execution only if the element is 100% visible AND no other fetch is currently running!
+        if (firstEntry.isIntersecting && container && !isFetchingPage.current) {
+          isFetchingPage.current = true; // Engage atomic lock instantly
+          const nextPage = currentPage + 1;
+
+          try {
+            // Cache the layout height measurement to protect active anchor lines
+            const previousScrollHeight = container.scrollHeight;
+
+            const olderHistory = await getChannelMessages(
+              activeChannelId,
+              nextPage,
+            );
+
+            if (olderHistory && olderHistory.length > 0) {
+              // Prepend old history blocks down into your Zustand memory frame
+              useChatStore
+                .getState()
+                .prependHistoricalMessages(activeChannelId, olderHistory);
+              setCurrentPage(nextPage);
+
+              // Stabilize reader position so content doesn't snap down violently
+              setTimeout(() => {
+                container.scrollTop =
+                  container.scrollHeight - previousScrollHeight;
+                isFetchingPage.current = false; // Release lock safely on layout shift complete
+              }, 10);
+            } else {
+              setHasMoreMessages(false); // No records left in Postgres, shut down tracking
+              isFetchingPage.current = false;
+            }
+          } catch (err) {
+            console.error("Failed to load paginated history logs:", err);
+            isFetchingPage.current = false;
+          }
+        }
+      },
+      {
+        root: containerRef.current,
+        threshold: 1.0, // Requires the entire height of the sentinel to cross into view
+      },
+    );
+
+    const currentSentinel = topSentinelRef.current;
+    if (currentSentinel) {
+      observer.observe(currentSentinel);
+    }
+
+    return () => {
+      if (currentSentinel) observer.unobserve(currentSentinel);
+    };
+  }, [
+    activeChannelId,
+    currentPage,
+    hasMoreMessages,
+    currentChannelMessages.length,
+  ]);
 
   useEffect(() => {
     async function loadWorkspaceData() {
@@ -80,10 +174,6 @@ function ConnectedWorkspace({ session }: { session: any }) {
     }
     loadWorkspaceData();
   }, []);
-
-  const currentChannelMessages = activeChannelId
-    ? messagesByChannel[activeChannelId] || []
-    : [];
 
   // Instant scroll snap down on every incoming text layout shift
   // Look for this exact useEffect block inside src/app/chat/page.tsx:
@@ -113,11 +203,17 @@ function ConnectedWorkspace({ session }: { session: any }) {
   }, [currentChannelMessages.length, activeChannelId, session.user.id]);
 
   const handleChannelSelect = async (channel: SidebarItem) => {
+    if (isRoomLoading.current === channel.id) return;
     setActiveChannel(channel.id);
     setActiveRoomTitle(`# ${channel.name}`);
     clearUnread(channel.id);
+
+    // 🚀 FIXED: Reset page counter state and force page 0 boundary caps
+    setCurrentPage(0);
+    setHasMoreMessages(true);
+
     try {
-      const history = await getChannelMessages(channel.id);
+      const history = await getChannelMessages(channel.id, 0); // 👈 Explicitly fetch ONLY freshest 30 messages
       setInitialMessages(channel.id, history || []);
     } catch (err) {
       console.error(err);
@@ -125,12 +221,19 @@ function ConnectedWorkspace({ session }: { session: any }) {
   };
 
   const handleUserSelect = async (user: SidebarItem) => {
+    if (isRoomLoading.current === user.id) return;
     setActiveRoomTitle(`💬 ${user.name}`);
+
+    // 🚀 FIXED: Reset page counter state and force page 0 boundary caps
+    setCurrentPage(0);
+    setHasMoreMessages(true);
+
     try {
       const sharedChannelId = await getOrCreateDirectMessageChannel(user.id);
       setActiveChannel(sharedChannelId);
       clearUnread(sharedChannelId);
-      const history = await getChannelMessages(sharedChannelId);
+
+      const history = await getChannelMessages(sharedChannelId, 0); // 👈 Explicitly fetch ONLY freshest 30 messages
       setInitialMessages(sharedChannelId, history || []);
     } catch (err) {
       console.error(err);
@@ -321,12 +424,15 @@ function ConnectedWorkspace({ session }: { session: any }) {
             </div>
 
             {/* SCROLL WINDOW */}
-            {/* SCROLL WINDOW */}
             <div
               ref={containerRef}
               className="flex-1 overflow-y-auto p-6 min-h-0 bg-zinc-900/30 flex flex-col"
             >
               <div className="flex flex-col gap-3 w-full min-w-0 flex-1">
+                <div
+                  ref={topSentinelRef}
+                  className="h-1 w-full opacity-0 pointer-events-none shrink-0"
+                />
                 {currentChannelMessages.map((msg: any, index: number) => {
                   // 1. Determine if the active user sent the message
                   const isMe = (msg.senderId || msg.userId) === session.user.id;

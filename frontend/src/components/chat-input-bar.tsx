@@ -12,10 +12,14 @@ export function ChatInputBar({ activeChannelId }: ChatInputBarProps) {
   const [typedMessage, setTypedMessage] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // 🚀 1. Declared text input DOM reference variable
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
   const socket = useChatStore((state) => state.socket);
 
   const handleSendMessage = (e?: React.FormEvent) => {
-    if (e) e.preventDefault(); // Lock form to prevent destructive page refreshes
+    if (e) e.preventDefault();
     if (!socket) return;
     if (!typedMessage.trim() || !activeChannelId) return;
 
@@ -24,11 +28,16 @@ export function ChatInputBar({ activeChannelId }: ChatInputBarProps) {
       content: typedMessage.trim(),
     });
     setTypedMessage("");
+
+    // 🚀 2. Enforce instant input ref refocusing on submission
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 0);
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !activeChannelId) return;
+    if (!file || !activeChannelId || !socket) return;
 
     setIsUploading(true);
     try {
@@ -44,13 +53,14 @@ export function ChatInputBar({ activeChannelId }: ChatInputBarProps) {
       formData.append("folder", "chat_attachments");
 
       const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${signData.cloudName}/image/upload`;
+
       const uploadResponse = await fetch(cloudinaryUrl, {
         method: "POST",
         body: formData,
       });
       const uploadedAsset = await uploadResponse.json();
 
-      if (socket && uploadedAsset.secure_url) {
+      if (uploadedAsset.secure_url) {
         socket.emit("send_message", {
           channelId: activeChannelId,
           content: `🖼️ Attached Image: ${uploadedAsset.secure_url}`,
@@ -62,6 +72,11 @@ export function ChatInputBar({ activeChannelId }: ChatInputBarProps) {
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
+
+      // 🚀 3. Enforce input refocusing after file upload pipelines complete
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 0);
     }
   };
 
@@ -84,6 +99,7 @@ export function ChatInputBar({ activeChannelId }: ChatInputBarProps) {
         />
       </label>
       <input
+        ref={inputRef} // 🚀 4. Bound reference link to the input node element
         type="text"
         placeholder={
           isUploading ? "Processing upload..." : "Type your message..."
@@ -99,3 +115,5 @@ export function ChatInputBar({ activeChannelId }: ChatInputBarProps) {
     </form>
   );
 }
+
+//;

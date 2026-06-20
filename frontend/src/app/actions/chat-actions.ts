@@ -19,7 +19,7 @@ export async function getChannelMessages(channelId: string, page: number = 0) {
   });
   if (!session) throw new Error("Unauthorized");
 
-  const pageSize = 30; // 🚀 Planned Pagination parameter size config
+  const pageSize = 10; // 🚀 Planned Pagination parameter size config
   const calculatedOffset = page * pageSize;
 
   // 2. Fetch chunked messages using relational mapping to pull clean usernames

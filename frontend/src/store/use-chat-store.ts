@@ -6,7 +6,7 @@ export interface Message {
   id: string;
   channelId: string;
   senderId: string;
-  senderName?: string; // 🚀 ADD THIS PROPERTY RIGHT HERE so Zustand preserves names!
+  senderName?: string;
   content: string;
   createdAt: string;
 }
@@ -14,10 +14,15 @@ export interface Message {
 interface ChatState {
   activeChannelId: string | null;
   messagesByChannel: Record<string, Message[]>;
-  socket: Socket | null; // 🔌 Holds the single, production-safe reference
+  socket: Socket | null;
   setActiveChannel: (channelId: string | null) => void;
   addMessage: (channelId: string, message: Message) => void;
   setInitialMessages: (channelId: string, messages: Message[]) => void;
+  // 🚀 ADDED TO INTERFACE: Explicit type mapping footprint configuration
+  prependHistoricalMessages: (
+    channelId: string,
+    oldMessages: Message[],
+  ) => void;
   setSocket: (socket: Socket | null) => void;
 }
 
@@ -30,7 +35,6 @@ export const useChatStore = create<ChatState>((set) => ({
   addMessage: (channelId, message) =>
     set((state) => {
       const existing = state.messagesByChannel[channelId] || [];
-      // Guard clause: Avoid duplicating messages across rapid real-time multi-device loops
       if (existing.some((m) => m.id === message.id)) return state;
 
       return {
@@ -48,5 +52,25 @@ export const useChatStore = create<ChatState>((set) => ({
         [channelId]: messages,
       },
     })),
+
+  // 🚀 THE CRITICAL HISTORICAL CHUNK PREPENDER:
+  // Adds older history logs cleanly to the top of the chat view container array
+  prependHistoricalMessages: (channelId, oldMessages) =>
+    set((state) => {
+      const existing = state.messagesByChannel[channelId] || [];
+
+      // Safety filter: Avoid duplicating entries if real-time packets overlap with fetch requests
+      const uniqueOldMessages = oldMessages.filter(
+        (oldMsg) => !existing.some((m) => m.id === oldMsg.id),
+      );
+
+      return {
+        messagesByChannel: {
+          ...state.messagesByChannel,
+          [channelId]: [...uniqueOldMessages, ...existing], // Prepend historical logs directly to the top!
+        },
+      };
+    }),
+
   setSocket: (socket) => set({ socket }),
 }));
