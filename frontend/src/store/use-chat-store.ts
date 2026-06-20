@@ -15,23 +15,26 @@ interface ChatState {
   activeChannelId: string | null;
   messagesByChannel: Record<string, Message[]>;
   socket: Socket | null;
+  onlineUserIds: string[]; // 🚀 BACK TO FLAT SIDEBAR INDEX MAPPING
   setActiveChannel: (channelId: string | null) => void;
   addMessage: (channelId: string, message: Message) => void;
   setInitialMessages: (channelId: string, messages: Message[]) => void;
-  // 🚀 ADDED TO INTERFACE: Explicit type mapping footprint configuration
   prependHistoricalMessages: (
     channelId: string,
     oldMessages: Message[],
   ) => void;
   setSocket: (socket: Socket | null) => void;
+  setOnlineUsers: (userIds: string[]) => void; // 🚀 MUTATION DISPATCH
 }
 
 export const useChatStore = create<ChatState>((set) => ({
   activeChannelId: null,
   messagesByChannel: {},
   socket: null,
+  presenceByChannel: {},
+  onlineUserIds: [],
   setActiveChannel: (channelId) => set({ activeChannelId: channelId }),
-
+  setOnlineUsers: (userIds) => set({ onlineUserIds: userIds }),
   addMessage: (channelId, message) =>
     set((state) => {
       const existing = state.messagesByChannel[channelId] || [];
@@ -71,6 +74,12 @@ export const useChatStore = create<ChatState>((set) => ({
         },
       };
     }),
-
+  setRoomPresence: (channelId, userIds) =>
+    set((state) => ({
+      presenceByChannel: {
+        ...state.presenceByChannel,
+        [channelId]: userIds,
+      },
+    })),
   setSocket: (socket) => set({ socket }),
 }));

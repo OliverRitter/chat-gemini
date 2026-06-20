@@ -47,13 +47,24 @@ export default function ChatDashboardPage() {
 }
 
 function ConnectedWorkspace({ session }: { session: any }) {
+  const activeChannelId = useChatStore((state) => state.activeChannelId);
+  const setActiveChannel = useChatStore((state) => state.setActiveChannel);
+  const setInitialMessages = useChatStore((state) => state.setInitialMessages);
+  const presenceByChannel = useChatStore((state) => state.presenceByChannel);
+
+  const onlineUserIds = useChatStore(
+    (state) => state.onlineUserIds || EMPTY_MESSAGES_ARRAY,
+  );
+
   const [currentPage, setCurrentPage] = useState(0);
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const topSentinelRef = useRef<HTMLDivElement | null>(null);
-  const activeChannelId = useChatStore((state) => state.activeChannelId);
+
   const messagesByChannel = useChatStore((state) => state.messagesByChannel);
-  const setActiveChannel = useChatStore((state) => state.setActiveChannel);
-  const setInitialMessages = useChatStore((state) => state.setInitialMessages);
+
+  const currentRoomOnlineIds = activeChannelId
+    ? presenceByChannel[activeChannelId] || []
+    : [];
 
   const currentChannelMessages = useChatStore((state: any) =>
     state.activeChannelId
@@ -331,7 +342,7 @@ function ConnectedWorkspace({ session }: { session: any }) {
 
           {/* DIRECT MESSAGES LAYER */}
           {/* 🛠️ ADDED: HIGH-PERFORMANCE USER DIRECTORY SEARCH LAYER */}
-          {/* DIRECT MESSAGES / FIND COWORKERS LAYER */}
+
           <div>
             <div className="px-1 mb-3">
               <label className="text-xs font-semibold uppercase tracking-wider text-zinc-500 block mb-1.5">
@@ -357,7 +368,6 @@ function ConnectedWorkspace({ session }: { session: any }) {
                   }
 
                   // 🚀 2. If typing, dynamically fetch matching users from the whole DB
-                  // This lets you find and click on brand new contacts instantly!
                   const searchResults = await searchNewUsers(value);
                   setUsersList(
                     (searchResults || []).map((u) => ({
@@ -375,11 +385,14 @@ function ConnectedWorkspace({ session }: { session: any }) {
               {usersList.map((usr: any) => {
                 const isRoomActive = activeRoomTitle.includes(usr.name);
 
+                // 🚀 STEP A: Check if this specific user ID is active inside the global online array!
+                const isOnline = onlineUserIds.includes(usr.id);
+
                 return (
                   <button
                     key={usr.id}
                     onClick={() => handleUserSelect(usr)}
-                    className={`w-full flex items-center px-3 py-1.5 rounded-md text-sm font-medium text-left truncate transition-colors ${
+                    className={`w-full flex items-center justify-between px-3 py-1.5 rounded-md text-sm font-medium text-left transition-colors ${
                       isRoomActive
                         ? "bg-blue-600 text-white"
                         : "hover:bg-zinc-800 text-zinc-400"
@@ -388,6 +401,16 @@ function ConnectedWorkspace({ session }: { session: any }) {
                     <span className="truncate">
                       👤 {usr.name || "Workspace Member"}
                     </span>
+
+                    {/* 🚀 STEP B: THE VISUAL ANCHOR DOTS
+                        Renders glowing green if online, and flat grey if offline! */}
+                    <span
+                      className={`h-2 w-2 rounded-full shrink-0 border border-zinc-950 transition-colors ml-2 ${
+                        isOnline
+                          ? "bg-green-500 shadow-[0_0_6px_rgba(34,197,94,0.6)]"
+                          : "bg-zinc-600"
+                      }`}
+                    />
                   </button>
                 );
               })}
@@ -420,6 +443,11 @@ function ConnectedWorkspace({ session }: { session: any }) {
             <div className="h-14 border-b border-zinc-800 flex items-center px-6 shrink-0 bg-zinc-950">
               <h1 className="font-semibold text-sm tracking-wide text-white truncate">
                 {activeRoomTitle}
+                {currentRoomOnlineIds.length > 1 ? (
+                  <span className="h-2.5 w-2.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)] border border-zinc-950" />
+                ) : (
+                  <span className="h-2.5 w-2.5 rounded-full bg-zinc-600 border border-zinc-950" />
+                )}
               </h1>
             </div>
 

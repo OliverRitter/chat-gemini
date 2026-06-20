@@ -1,12 +1,11 @@
-// src/index.ts
 import express from "express";
 import { createServer } from "http";
 import { Server, Socket } from "socket.io";
 import dotenv from "dotenv";
 import { db } from "./db/index.js";
-import { eq } from "drizzle-orm";
-import { sessions, messages, users } from "./db/schema.js";
-
+import { eq, and } from "drizzle-orm";
+import { sessions, messages, users, channelMembers } from "./db/schema.js";
+import { sessions, messages, users, channelMembers } from "./db/schema.js";
 dotenv.config();
 
 const app = express();
@@ -23,12 +22,6 @@ const io = new Server(httpServer, {
 // User to active device socket set registration registry cache mapping
 const userDeviceRegistry = new Map<string, Set<string>>();
 
-// =========================================================================
-// SECURITY MIDDLEWARE: Handshake Verification via Neon Sessions & Users Lookup
-// =========================================================================
-// =========================================================================
-// SECURITY MIDDLEWARE: Handshake Verification via Neon Sessions Lookup
-// =========================================================================
 // =========================================================================
 // SECURITY MIDDLEWARE: Handshake Verification via Neon Sessions Lookup
 // =========================================================================
@@ -91,24 +84,39 @@ io.on("connection", (socket: Socket) => {
   }
   userDeviceRegistry.get(userId)!.add(socket.id);
 
-  // Inside io.on("connection", (socket: Socket) => { ... in backend/src/index.ts
+  // 🚀 HIGH-PERFORMANCE REUSABLE PRESENCE BROADCASTER
+  // Calculates who is inside this specific channel and alerts all active members in it
+  // 🚀 HIGH-PERFORMANCE REUSABLE PRESENCE BROADCASTER (100% Database-Free!)
+  // Scans active memory sockets inside this specific room and maps user IDs cleanly.
+  const broadcastWorkspacePresence = () => {
+    try {
+      // Extract all user IDs that currently have an active socket session running in memory
+      const onlineUserIds = Array.from(userDeviceRegistry.keys());
+
+      // Broadcast this simple string array to EVERYONE authenticated on the server
+      // Since it only contains active user IDs, the data package remains incredibly light!
+      io.emit("workspace_presence_update", onlineUserIds);
+    } catch (err) {
+      console.error("Failed to broadcast workspace presence update:", err);
+    }
+  };
+
+  // Update your connection and room navigation hooks to call our new method:
+  // 1. Alert everyone the moment a user establishes a socket line connection
+  broadcastWorkspacePresence();
 
   // 🚀 ROOM NAVIGATION LISTENERS
   socket.on("join_channel", (channelId: string) => {
     socket.join(channelId);
-    console.log(
-      `👤 User [${socket.data.senderName}] joined channel room [${channelId}]`,
-    );
+    console.log(`👤 User [${senderName}] joined channel room [${channelId}]`);
   });
 
   socket.on("leave_channel", (channelId: string) => {
     socket.leave(channelId);
-    console.log(
-      `👤 User [${socket.data.senderName}] left channel room [${channelId}]`,
-    );
+    console.log(`👤 User [${senderName}] left channel room [${channelId}]`);
   });
 
-  // Core Receiver Pipeline
+  // CORE REAL-TIME RECEIVER PIPELINE
   socket.on(
     "send_message",
     async (data: { channelId: string; content: string }) => {
@@ -135,14 +143,16 @@ io.on("connection", (socket: Socket) => {
           createdAt: insertedMessage.createdAt.toISOString(),
         };
 
-        // 🚀 FIXED: Emits ONLY to clients residing inside this targeted room channel!
+        // Emits ONLY to clients residing inside this targeted room channel
         io.to(channelId).emit("message_received", messagePayload);
       } catch (err) {
-        console.error(err);
+        console.error("Failed to process message transit payload:", err);
       }
     },
   );
 
+  // SECURE DEVICE LIFECYCLE DISCONNECTION HARVESTER
+  // SECURE DEVICE LIFECYCLE DISCONNECTION HARVESTER
   socket.on("disconnect", () => {
     const deviceSet = userDeviceRegistry.get(userId);
     if (deviceSet) {
@@ -152,6 +162,9 @@ io.on("connection", (socket: Socket) => {
         console.log(
           `👤 User [${senderName}] completely offline (All devices disconnected safely)`,
         );
+
+        // 🚀 UPDATED: Alerts everyone instantly that this user went offline
+        broadcastWorkspacePresence();
       }
     }
   });
