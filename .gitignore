@@ -1,0 +1,21 @@
+# Local Environment Secrets (CRITICAL)
+.env
+.env.local
+.env.production
+.env.development
+.env.*.local
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Next.js Build Outputs
+.next/
+out/
+build/
+
+# IDE and System Files
+.DS_Store
+.vscode/
+.idea/
+*.log

@@ -1,0 +1,6 @@
+ALTER TABLE "sessions" ADD COLUMN "ip_address" text;--> statement-breakpoint
+ALTER TABLE "sessions" ADD COLUMN "user_agent" text;--> statement-breakpoint
+ALTER TABLE "users" ADD COLUMN "role" text;--> statement-breakpoint
+ALTER TABLE "users" ADD COLUMN "banned" boolean;--> statement-breakpoint
+ALTER TABLE "users" ADD COLUMN "ban_reason" text;--> statement-breakpoint
+ALTER TABLE "users" ADD COLUMN "ban_expires" timestamp;
