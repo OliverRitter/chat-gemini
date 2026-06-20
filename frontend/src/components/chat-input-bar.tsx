@@ -98,7 +98,7 @@ export function ChatInputBar({ activeChannelId }: ChatInputBarProps) {
       formData.append("signature", signData.signature);
       formData.append("folder", "chat_attachments");
 
-      const cloudinaryUrl = `https://cloudinary.com{signData.cloudName}/image/upload`;
+      const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${signData.cloudName}/image/upload`;
 
       const uploadResponse = await fetch(cloudinaryUrl, {
         method: "POST",
