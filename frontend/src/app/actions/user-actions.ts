@@ -208,6 +208,7 @@ export async function createGlobalChannel(name: string) {
 }
 
 // src/app/actions/chat-actions.ts
+
 export async function getChannelMessages(channelId: string, page: number = 0) {
   const session = await auth.api.getSession({
     headers: await headers(),
@@ -222,9 +223,9 @@ export async function getChannelMessages(channelId: string, page: number = 0) {
     orderBy: [desc(messages.createdAt)],
     limit: pageSize,
     offset: calculatedOffset,
-    // 🚀 THE FIX: Tell Drizzle to fetch the linked sender user record
+    // 🟩 FIXED: Changed 'user' to 'sender' to perfectly match your schema relation name!
     with: {
-      user: {
+      sender: {
         columns: {
           name: true,
         },
@@ -239,7 +240,7 @@ export async function getChannelMessages(channelId: string, page: number = 0) {
     senderId: msg.senderId,
     content: msg.content,
     createdAt: msg.createdAt.toISOString(),
-    // 🚀 Extract the clean username string from the joined relation record
-    senderName: msg.user?.name || "Unknown User",
+    // 🟩 FIXED: Safely read from the 'sender' object payload
+    senderName: msg.sender?.name || "Unknown User",
   }));
 }

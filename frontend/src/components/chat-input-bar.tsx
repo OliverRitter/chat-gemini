@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useChatStore } from "@/store/use-chat-store";
-// 🚀 IMPORT THE CLEAN PORTAL PICKER LIBRARY
 import EmojiPicker, { Theme, EmojiClickData } from "emoji-picker-react";
 
 interface ChatInputBarProps {

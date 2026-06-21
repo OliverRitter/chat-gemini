@@ -56,7 +56,9 @@ export const accounts = pgTable("accounts", {
 
 export const messages = pgTable("messages", {
   id: uuid("id").defaultRandom().primaryKey(),
-  channelId: text("channel_id").notNull(),
+  channelId: uuid("channel_id")
+    .notNull()
+    .references(() => channels.id, { onDelete: "cascade" }),
   senderId: text("sender_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),

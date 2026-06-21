@@ -16,6 +16,7 @@ import {
 import { getOrCreateDirectMessageChannel } from "@/app/actions/dm-actions";
 import { Button } from "@/components/ui/button";
 import { getChannelMessages } from "@/app/actions/chat-actions";
+import { RelativeTime } from "@/components/relative-time";
 
 interface SidebarItem {
   id: string;
@@ -225,6 +226,7 @@ function ConnectedWorkspace({ session }: { session: any }) {
 
     try {
       const history = await getChannelMessages(channel.id, 0); // 👈 Explicitly fetch ONLY freshest 30 messages
+      console.log({ history });
       setInitialMessages(channel.id, history || []);
     } catch (err) {
       console.error(err);
@@ -253,8 +255,6 @@ function ConnectedWorkspace({ session }: { session: any }) {
     }
   };
 
-  // Inside your function ConnectedWorkspace({ session }) { ...
-
   // 🔑 PASTE THIS EXTRACTED CODE BLOCK HERE TO RESTORE THE FUNCTION:
   const handleCreateChannel = async () => {
     const name = prompt("Enter new channel name:");
@@ -267,13 +267,10 @@ function ConnectedWorkspace({ session }: { session: any }) {
     }
   };
 
-  // ... Your existing handleChannelSelect and handleUserSelect code continues right below ...
-
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-zinc-900 text-zinc-100 font-sans antialiased">
       {/* SIDEBAR */}
-      {/* SIDEBAR NAVIGATION */}
-      <aside className="w-64 h-full border-r border-zinc-800 bg-zinc-950 p-4 flex flex-col justify-between shrink-0 relative">
+      <aside className="w-64 h-full border-r border-zinc-800 bg-zinc-950 p-4 flex flex-col justify-between shrink relative">
         {/* TOP CONTENT WRAPPER */}
         <div className="space-y-6 overflow-y-auto flex-1 pr-1">
           <div>
@@ -283,7 +280,6 @@ function ConnectedWorkspace({ session }: { session: any }) {
             </p>
           </div>
 
-          {/* CHANNELS LAYER WITH RESTORED CREATION TRIGGER */}
           {/* CHANNELS LAYER */}
           <div>
             <div className="flex items-center justify-between mb-2 px-1">
@@ -391,7 +387,7 @@ function ConnectedWorkspace({ session }: { session: any }) {
                 const isOnline = onlineUserIds.includes(usr.id);
 
                 const userUnreadCount = unreadCounts[usr.id] || 0;
-                console.log({ userUnreadCount });
+
                 return (
                   <button
                     key={usr.id}
@@ -406,7 +402,7 @@ function ConnectedWorkspace({ session }: { session: any }) {
                       👤 {usr.name || "Workspace Member"}
                       {/* 🟩 2. THE VISUAL FIX: If a coworker sent you a message, render the number badge here! */}
                       {userUnreadCount > 0 && (
-                        <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center shrink-0">
+                        <span className="bg-gray-800 ml-2 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center shrink-0">
                           {userUnreadCount}
                         </span>
                       )}
@@ -429,7 +425,7 @@ function ConnectedWorkspace({ session }: { session: any }) {
         </div>
 
         {/* BOTTOM PINNED ACTIONS LAYER */}
-        <div className="pt-4 border-t border-zinc-800 mt-auto shrink-0">
+        <div className="pt-4 border-t border-zinc-800 mt-auto shrink">
           <Button
             variant="outline"
             size="sm"
@@ -489,13 +485,8 @@ function ConnectedWorkspace({ session }: { session: any }) {
                       key={msg.id || index}
                       className={`flex flex-col w-full min-w-0 ${isMe ? "items-end" : "items-start"}`}
                     >
-                      {/* 🚀 FIXED: We must print {senderLabel} here, NOT msg.senderId! */}
-                      <span className="text-[10px] text-zinc-500 mb-0.5 px-1">
-                        {senderLabel}
-                      </span>
-
                       <div
-                        className={`p-3 rounded-2xl text-sm shadow-md max-w-[75%] break-all break-words whitespace-pre-wrap [word-break:break-word] overflow-hidden ${
+                        className={`p-3 rounded-2xl text-sm shadow-md max-w-[75%] break-all break-words whitespace-pre-wrap [word-break:break-word] overflow-hidden flex flex-col ${
                           isMe
                             ? "bg-blue-600 text-white rounded-tr-none"
                             : "bg-zinc-800 text-zinc-200 rounded-tl-none border border-zinc-700"
@@ -520,6 +511,13 @@ function ConnectedWorkspace({ session }: { session: any }) {
                         ) : (
                           textContent
                         )}
+                        <div className="flex justify-between items-center text-gray-100/40 border-t-amber-950/20 border-t mt-2.5">
+                          <RelativeTime timestamp={msg.createdAt} />
+                          {/* 🚀 FIXED: We must print {senderLabel} here, NOT msg.senderId! */}
+                          <span className="text-[10px] ml-6 text-gray-100/40 ">
+                            {senderLabel}
+                          </span>
+                        </div>
                       </div>
                     </div>
                   );
