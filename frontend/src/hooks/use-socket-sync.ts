@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { useChatStore } from "@/store/use-chat-store";
 import { authClient } from "@/lib/auth-client";
 import { io } from "socket.io-client";
+import { useNotificationStore } from "@/store/use-notification-store";
 
 export function useSocketSync() {
   const { data: session } = authClient.useSession();
@@ -30,9 +31,20 @@ export function useSocketSync() {
     setSocket(socketInstance);
 
     // Listener A: Live Text Messages (Now safely calling getState directly)
+    // frontend/src/hooks/use-socket-sync.ts
+
+    // Listener A: Live Text Messages (Safely Separated)
     socketInstance.on("message_received", (payload: any) => {
       const targetChannel = payload.channelId || payload.roomId;
       if (targetChannel) {
+        // 🟩 STEP 1: Process notifications FIRST!
+        // This ensures that even if a message array is flagged as a duplicate,
+        // the notification system still gets to check and handle the badge counting!
+        useNotificationStore
+          .getState()
+          .incrementUnread(targetChannel, payload.senderId);
+
+        // STEP 2: Drop the message into your chat feed container RAM space
         useChatStore.getState().addMessage(targetChannel, payload);
       }
     });

@@ -1,37 +1,43 @@
-// src/store/use-notification-store.ts
 import { create } from "zustand";
 import { useChatStore } from "./use-chat-store";
 
 interface NotificationState {
-  unreadCounts: Record<string, number>; // Maps channelId or privateRoomId -> total unread number
-  incrementUnread: (channelId: string) => void;
-  clearUnread: (channelId: string) => void;
+  unreadCounts: Record<string, number>;
+  incrementUnread: (channelId: string, senderId: string) => void;
+  clearUnread: (targetId: string) => void;
 }
 
 export const useNotificationStore = create<NotificationState>((set) => ({
   unreadCounts: {},
 
-  incrementUnread: (channelId) => {
-    // 1. Grab the active channel ID the user is currently looking at on their screen
+  incrementUnread: (channelId, senderId) => {
     const activeChannelId = useChatStore.getState().activeChannelId;
 
-    // 2. CRUCIAL GUARD: If the message arrived in the channel they are already viewing, DO NOT add a badge!
+    // GUARD: If you are already looking at this conversation room, do nothing
     if (channelId === activeChannelId) return;
 
-    // 3. Otherwise, increment the counter for that specific unviewed room
-    set((state) => ({
-      unreadCounts: {
-        ...state.unreadCounts,
-        [channelId]: (state.unreadCounts[channelId] || 0) + 1,
-      },
-    }));
+    set((state) => {
+      // 🟩 THE LOGIC RULES:
+      // If the message is a DM (the senderId is present and it is a unique person),
+      // we save the count under the sender's personal ID so the sidebar can read it.
+      // Otherwise, it is a public channel, so we save it under the channel ID.
+      const isPublicChannel = channelId.startsWith("channel_") || !senderId;
+      const trackingKey = isPublicChannel ? channelId : senderId;
+
+      return {
+        unreadCounts: {
+          ...state.unreadCounts,
+          [trackingKey]: (state.unreadCounts[trackingKey] || 0) + 1,
+        },
+      };
+    });
   },
 
-  clearUnread: (channelId) =>
+  clearUnread: (targetId) =>
     set((state) => ({
       unreadCounts: {
         ...state.unreadCounts,
-        [channelId]: 0,
+        [targetId]: 0,
       },
     })),
 }));

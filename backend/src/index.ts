@@ -3,8 +3,8 @@ import { createServer } from "http";
 import { Server, Socket } from "socket.io";
 import dotenv from "dotenv";
 import { db } from "./db/index.js";
-import { eq, and } from "drizzle-orm";
-import { sessions, messages, users, channelMembers } from "./db/schema.js";
+import { eq, and, sql } from "drizzle-orm"; // 🟩 Ensure 'sql' is imported here
+
 import { sessions, messages, users, channelMembers } from "./db/schema.js";
 dotenv.config();
 
@@ -77,7 +77,7 @@ io.on("connection", (socket: Socket) => {
   console.log(
     `📡 Secure Socket Established: User [${senderName}] (${userId}) linked on [${socket.id}]`,
   );
-
+  socket.join(userId);
   // Device Mapping Layer initialization
   if (!userDeviceRegistry.has(userId)) {
     userDeviceRegistry.set(userId, new Set());
@@ -124,6 +124,7 @@ io.on("connection", (socket: Socket) => {
         const { channelId, content } = data;
         if (!content.trim() || !channelId) return;
 
+        // 1. Insert the message text into your rows safely
         const [insertedMessage] = await db
           .insert(messages)
           .values({
@@ -138,20 +139,39 @@ io.on("connection", (socket: Socket) => {
           id: insertedMessage.id,
           channelId: insertedMessage.channelId,
           senderId: insertedMessage.senderId,
-          senderName: senderName, // Mapped clean human name string
+          senderName: senderName,
           content: insertedMessage.content,
           createdAt: insertedMessage.createdAt.toISOString(),
         };
 
-        // Emits ONLY to clients residing inside this targeted room channel
-        io.to(channelId).emit("message_received", messagePayload);
+        // 🟩 THE ABSOLUTE REPAIR: Run a raw SQL query execution parameter string!
+        // This reads the raw Postgres strings directly, bypassing the Drizzle object schema compilation
+        // completely so it can NEVER crash your node process with a Symbol columns error again.
+        const rawMembersResult = await db.execute(
+          sql`SELECT user_id as "userId" FROM channel_members WHERE channel_id = ${channelId}`,
+        );
+
+        // Access the raw data rows safely from the Postgres database engine result instance
+        const validMembers = rawMembersResult.rows || [];
+
+        if (validMembers.length > 0) {
+          validMembers.forEach((member: any) => {
+            // Direct-route the data package to each user's permanent private account socket room
+            const targetRecipient = member?.userId;
+            if (targetRecipient) {
+              io.to(targetRecipient).emit("message_received", messagePayload);
+            }
+          });
+        } else {
+          // Fallback option if no database connection rows exist yet
+          io.to(channelId).emit("message_received", messagePayload);
+        }
       } catch (err) {
         console.error("Failed to process message transit payload:", err);
       }
     },
   );
 
-  // SECURE DEVICE LIFECYCLE DISCONNECTION HARVESTER
   // SECURE DEVICE LIFECYCLE DISCONNECTION HARVESTER
   socket.on("disconnect", () => {
     const deviceSet = userDeviceRegistry.get(userId);

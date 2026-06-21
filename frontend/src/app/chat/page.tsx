@@ -60,7 +60,7 @@ function ConnectedWorkspace({ session }: { session: any }) {
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const topSentinelRef = useRef<HTMLDivElement | null>(null);
 
-  const messagesByChannel = useChatStore((state) => state.messagesByChannel);
+  // const messagesByChannel = useChatStore((state) => state.messagesByChannel);
 
   const currentRoomOnlineIds = activeChannelId
     ? presenceByChannel[activeChannelId] || []
@@ -82,7 +82,7 @@ function ConnectedWorkspace({ session }: { session: any }) {
   // Inside function ConnectedWorkspace({ session }) inside src/app/chat/page.tsx:
 
   // 🚀 TRUE CONCURRENT THROTTLE FLAG: Prevents overlapping network calls
-  const isFetchingHistory = useRef(false);
+  // const isFetchingHistory = useRef(false);
   const isRoomLoading = useRef<string | null>(null);
 
   // Inside function ConnectedWorkspace({ session }) { ... in src/app/chat/page.tsx
@@ -235,16 +235,18 @@ function ConnectedWorkspace({ session }: { session: any }) {
     if (isRoomLoading.current === user.id) return;
     setActiveRoomTitle(`💬 ${user.name}`);
 
-    // 🚀 FIXED: Reset page counter state and force page 0 boundary caps
     setCurrentPage(0);
     setHasMoreMessages(true);
 
     try {
       const sharedChannelId = await getOrCreateDirectMessageChannel(user.id);
       setActiveChannel(sharedChannelId);
-      clearUnread(sharedChannelId);
 
-      const history = await getChannelMessages(sharedChannelId, 0); // 👈 Explicitly fetch ONLY freshest 30 messages
+      // 🟩 THE LAYOUT CORRECTION:
+      // Clear the unread badge using the teammate's user ID, NOT the server room token!
+      clearUnread(user.id);
+
+      const history = await getChannelMessages(sharedChannelId, 0);
       setInitialMessages(sharedChannelId, history || []);
     } catch (err) {
       console.error(err);
@@ -388,6 +390,8 @@ function ConnectedWorkspace({ session }: { session: any }) {
                 // 🚀 STEP A: Check if this specific user ID is active inside the global online array!
                 const isOnline = onlineUserIds.includes(usr.id);
 
+                const userUnreadCount = unreadCounts[usr.id] || 0;
+                console.log({ userUnreadCount });
                 return (
                   <button
                     key={usr.id}
@@ -400,6 +404,12 @@ function ConnectedWorkspace({ session }: { session: any }) {
                   >
                     <span className="truncate">
                       👤 {usr.name || "Workspace Member"}
+                      {/* 🟩 2. THE VISUAL FIX: If a coworker sent you a message, render the number badge here! */}
+                      {userUnreadCount > 0 && (
+                        <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center shrink-0">
+                          {userUnreadCount}
+                        </span>
+                      )}
                     </span>
 
                     {/* 🚀 STEP B: THE VISUAL ANCHOR DOTS
