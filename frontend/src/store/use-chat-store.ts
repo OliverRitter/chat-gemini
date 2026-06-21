@@ -15,7 +15,8 @@ interface ChatState {
   activeChannelId: string | null;
   messagesByChannel: Record<string, Message[]>;
   socket: Socket | null;
-  onlineUserIds: string[]; // 🚀 BACK TO FLAT SIDEBAR INDEX MAPPING
+  onlineUserIds: string[];
+  presenceByChannel: Record<string, string[]>; // 🟩 ADDED MISSING INTERFACE KEY
   setActiveChannel: (channelId: string | null) => void;
   addMessage: (channelId: string, message: Message) => void;
   setInitialMessages: (channelId: string, messages: Message[]) => void;
@@ -23,18 +24,20 @@ interface ChatState {
     channelId: string,
     oldMessages: Message[],
   ) => void;
+  setRoomPresence: (channelId: string, userIds: string[]) => void; // 🟩 ADDED MISSING METHOD TYPE
   setSocket: (socket: Socket | null) => void;
-  setOnlineUsers: (userIds: string[]) => void; // 🚀 MUTATION DISPATCH
+  setOnlineUsers: (userIds: string[]) => void;
 }
 
 export const useChatStore = create<ChatState>((set) => ({
   activeChannelId: null,
   messagesByChannel: {},
   socket: null,
-  presenceByChannel: {},
+  presenceByChannel: {}, // Now perfectly type-checked
   onlineUserIds: [],
   setActiveChannel: (channelId) => set({ activeChannelId: channelId }),
   setOnlineUsers: (userIds) => set({ onlineUserIds: userIds }),
+
   addMessage: (channelId, message) =>
     set((state) => {
       const existing = state.messagesByChannel[channelId] || [];
@@ -56,13 +59,9 @@ export const useChatStore = create<ChatState>((set) => ({
       },
     })),
 
-  // 🚀 THE CRITICAL HISTORICAL CHUNK PREPENDER:
-  // Adds older history logs cleanly to the top of the chat view container array
   prependHistoricalMessages: (channelId, oldMessages) =>
     set((state) => {
       const existing = state.messagesByChannel[channelId] || [];
-
-      // Safety filter: Avoid duplicating entries if real-time packets overlap with fetch requests
       const uniqueOldMessages = oldMessages.filter(
         (oldMsg) => !existing.some((m) => m.id === oldMsg.id),
       );
@@ -70,16 +69,19 @@ export const useChatStore = create<ChatState>((set) => ({
       return {
         messagesByChannel: {
           ...state.messagesByChannel,
-          [channelId]: [...uniqueOldMessages, ...existing], // Prepend historical logs directly to the top!
+          [channelId]: [...uniqueOldMessages, ...existing],
         },
       };
     }),
+
   setRoomPresence: (channelId, userIds) =>
-    set((state) => ({
+    set((state: any) => ({
+      // Cast state to any here or let Zustand infer it
       presenceByChannel: {
         ...state.presenceByChannel,
         [channelId]: userIds,
       },
     })),
+
   setSocket: (socket) => set({ socket }),
 }));
