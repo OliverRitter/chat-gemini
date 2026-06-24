@@ -10,6 +10,8 @@ interface MessageCanvasLayoutProps {
   session: any;
   showNewMessageBadge: boolean;
   scrollToBottomViewport: () => void;
+  handleScrollTracking: () => void;
+  hasMoreMessages: boolean;
 }
 
 export function MessageCanvasLayout({
@@ -19,12 +21,16 @@ export function MessageCanvasLayout({
   session,
   showNewMessageBadge,
   scrollToBottomViewport,
+  handleScrollTracking,
+  hasMoreMessages,
 }: MessageCanvasLayoutProps) {
   return (
+    // 🚀 CRITICAL REPAIR: Ensure the wrapper element is 'relative' so absolute buttons anchor flawlessly
     <div className="flex-1 min-h-0 relative w-full flex flex-col">
-      {/* YOUR EXACT SCROLL WINDOW */}
+      {/* SCROLLABLE VIEWPORT CANVAS */}
       <div
         ref={containerRef}
+        onScroll={handleScrollTracking} // Clears badge automatically if they scroll to bottom manually
         className="flex-1 overflow-y-auto p-6 min-h-0 bg-zinc-900/30 flex flex-col"
       >
         <div className="flex flex-col gap-3 w-full min-w-0 flex-1">
@@ -84,14 +90,14 @@ export function MessageCanvasLayout({
         </div>
       </div>
 
-      {/* FLOATING ACTION NOTIFICATION BADGE */}
+      {/* 🌟 FLOATING NOTIFICATION BADGE: PINNED TO THE BOTTOM CENTER OF THE ACTIVE CHAT TIMELINE */}
       {showNewMessageBadge && (
         <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-30 animate-bounce">
           <button
             onClick={scrollToBottomViewport}
-            className="bg-blue-600 hover:bg-blue-500 text-white font-medium text-xs rounded-full py-2 px-4 shadow-[0_4px_12px_rgba(0,0,0,0.5)] flex items-center gap-2 border border-blue-400/20 transition-colors tracking-wide"
+            className="bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-full py-2.5 px-4 shadow-[0_4px_16px_rgba(0,0,0,0.65)] flex items-center gap-2 border border-blue-400/30 transition-all active:scale-95 tracking-wide uppercase"
           >
-            ⬇️ New messages below
+            <span className="text-sm">⬇️</span> New messages below
           </button>
         </div>
       )}

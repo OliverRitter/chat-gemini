@@ -27,6 +27,8 @@ interface ChatState {
   setRoomPresence: (channelId: string, userIds: string[]) => void; // 🟩 ADDED MISSING METHOD TYPE
   setSocket: (socket: Socket | null) => void;
   setOnlineUsers: (userIds: string[]) => void;
+  isUserScrolledUp: boolean;
+  setIsUserScrolledUp: (scrolledUp: boolean) => void;
 }
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -35,6 +37,8 @@ export const useChatStore = create<ChatState>((set) => ({
   socket: null,
   presenceByChannel: {}, // Now perfectly type-checked
   onlineUserIds: [],
+  isUserScrolledUp: false,
+  setIsUserScrolledUp: (scrolledUp) => set({ isUserScrolledUp: scrolledUp }),
   setActiveChannel: (channelId) => set({ activeChannelId: channelId }),
   setOnlineUsers: (userIds) => set({ onlineUserIds: userIds }),
 

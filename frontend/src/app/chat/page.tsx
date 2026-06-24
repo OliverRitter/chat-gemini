@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import { authClient } from "@/lib/auth-client";
 import { useSocketSync } from "@/hooks/use-socket-sync";
 import { useChatStore } from "@/store/use-chat-store";
@@ -11,10 +11,7 @@ import { MessageCanvasLayout } from "@/components/MessageCanvasLayout";
 import { useDirectorySearch } from "@/hooks/use-directory-search";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { useWorkspaceScrollAndSync } from "@/hooks/use-workspace-scroll-and-sync";
-import {
-  getDirectoryData,
-  createGlobalChannel,
-} from "@/app/actions/user-actions";
+import { createGlobalChannel } from "@/app/actions/user-actions";
 import { getOrCreateDirectMessageChannel } from "@/app/actions/dm-actions";
 import { getChannelMessages } from "@/app/actions/chat-actions";
 
@@ -59,6 +56,12 @@ function ConnectedWorkspace({ session }: { session: any }) {
   );
   const onlineUserIds = useChatStore(
     (state) => state.onlineUserIds || EMPTY_MESSAGES_ARRAY,
+  );
+
+  // Zustand Store flags added for safe scroll monitoring
+  const isUserScrolledUp = useChatStore((state) => state.isUserScrolledUp);
+  const setIsUserScrolledUp = useChatStore(
+    (state) => state.setIsUserScrolledUp,
   );
 
   const { unreadCounts, clearUnread } = useNotificationStore();
@@ -113,24 +116,32 @@ function ConnectedWorkspace({ session }: { session: any }) {
     setChannelsList,
     setUsersList,
     containerRef,
+    setShowNewMessageBadge,
   });
 
   // Action Event Helpers
   const handleScrollTracking = () => {
     const container = containerRef.current;
     if (!container) return;
-    const distanceFromBottom =
-      container.scrollHeight - container.scrollTop - container.clientHeight;
-    if (distanceFromBottom <= 50) {
+
+    const currentScrollPosition = container.scrollTop;
+    const maximumScrollRange = container.scrollHeight - container.clientHeight;
+    const distanceToFloor = maximumScrollRange - currentScrollPosition;
+
+    if (distanceToFloor <= 60) {
       setShowNewMessageBadge(false);
+      setIsUserScrolledUp(false);
+    } else if (distanceToFloor > 200) {
+      setIsUserScrolledUp(true);
     }
   };
 
   const scrollToBottomViewport = () => {
     const container = containerRef.current;
     if (!container) return;
-    container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
     setShowNewMessageBadge(false);
+    setIsUserScrolledUp(false);
+    container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
   };
 
   const handleChannelSelect = async (channel: SidebarItem) => {
@@ -139,6 +150,7 @@ function ConnectedWorkspace({ session }: { session: any }) {
     setCurrentPage(0);
     setHasMoreMessages(true);
     setShowNewMessageBadge(false);
+    setIsUserScrolledUp(false);
 
     try {
       const history = await getChannelMessages(channel.id, 0);
@@ -161,6 +173,7 @@ function ConnectedWorkspace({ session }: { session: any }) {
     setCurrentPage(0);
     setHasMoreMessages(true);
     setShowNewMessageBadge(false);
+    setIsUserScrolledUp(false);
 
     try {
       const sharedChannelId = await getOrCreateDirectMessageChannel(user.id);
