@@ -12,11 +12,13 @@ import {
   searchNewUsers,
   searchGlobalChannels, // 🚀 ADDED THIS CRITICAL IMPORT
 } from "@/app/actions/user-actions";
-
+import { useDirectorySearch } from "@/hooks/use-directory-search";
 import { getOrCreateDirectMessageChannel } from "@/app/actions/dm-actions";
 import { Button } from "@/components/ui/button";
 import { getChannelMessages } from "@/app/actions/chat-actions";
 import { RelativeTime } from "@/components/relative-time";
+import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
+import { useWorkspaceScrollAndSync } from "@/hooks/use-workspace-scroll-and-sync";
 
 interface SidebarItem {
   id: string;
@@ -80,125 +82,39 @@ function ConnectedWorkspace({ session }: { session: any }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const isRoomLoading = useRef<string | null>(null);
+  const [channelSearchQuery, setChannelSearchQuery] = useState("");
+  const [userSearchQuery, setUserSearchQuery] = useState("");
 
   // 🚀 ATOMIC MUTATION LOCK: Strictly prevents parallel historical over-fetches
   const isFetchingPage = useRef(false);
 
-  useEffect(() => {
-    // Guard Clause: Block observation loops if we run out of database rows or are loading a new room
-    if (
-      !activeChannelId ||
-      !hasMoreMessages ||
-      currentChannelMessages.length === 0
-    )
-      return;
+  useDirectorySearch({
+    channelSearchQuery,
+    userSearchQuery,
+    setChannelsList,
+    setUsersList,
+  });
 
-    const observer = new IntersectionObserver(
-      async (entries) => {
-        const firstEntry = entries[0];
-        const container = containerRef.current;
-
-        // 🚀 THE SENIOR-GRADE BOUNDARY GATEWAY:
-        // Trigger execution only if the element is 100% visible AND no other fetch is currently running!
-        if (firstEntry.isIntersecting && container && !isFetchingPage.current) {
-          isFetchingPage.current = true; // Engage atomic lock instantly
-          const nextPage = currentPage + 1;
-
-          try {
-            // Cache the layout height measurement to protect active anchor lines
-            const previousScrollHeight = container.scrollHeight;
-
-            const olderHistory = await getChannelMessages(
-              activeChannelId,
-              nextPage,
-            );
-
-            if (olderHistory && olderHistory.length > 0) {
-              // Prepend old history blocks down into your Zustand memory frame
-              useChatStore
-                .getState()
-                .prependHistoricalMessages(activeChannelId, olderHistory);
-              setCurrentPage(nextPage);
-
-              // Stabilize reader position so content doesn't snap down violently
-              setTimeout(() => {
-                container.scrollTop =
-                  container.scrollHeight - previousScrollHeight;
-                isFetchingPage.current = false; // Release lock safely on layout shift complete
-              }, 10);
-            } else {
-              setHasMoreMessages(false); // No records left in Postgres, shut down tracking
-              isFetchingPage.current = false;
-            }
-          } catch (err) {
-            console.error("Failed to load paginated history logs:", err);
-            isFetchingPage.current = false;
-          }
-        }
-      },
-      {
-        root: containerRef.current,
-        threshold: 1.0, // Requires the entire height of the sentinel to cross into view
-      },
-    );
-
-    const currentSentinel = topSentinelRef.current;
-    if (currentSentinel) {
-      observer.observe(currentSentinel);
-    }
-
-    return () => {
-      if (currentSentinel) observer.unobserve(currentSentinel);
-    };
-  }, [
+  useInfiniteScroll({
     activeChannelId,
-    currentPage,
     hasMoreMessages,
-    currentChannelMessages.length,
-  ]);
+    currentChannelMessages,
+    currentPage,
+    setCurrentPage,
+    setHasMoreMessages,
+    containerRef,
+    topSentinelRef,
+    isFetchingPage,
+  });
 
-  useEffect(() => {
-    async function loadActiveWorkspaceData() {
-      try {
-        const data = await getDirectoryData();
-        if (data) {
-          setChannelsList(data.channels || []);
-
-          // 🌟 THE FIX: Only populate users they actually have active conversations with!
-          // Your backend 'getDirectoryData' should be scoped to existing relationships.
-          setUsersList(data.users || []);
-        }
-      } catch (error) {
-        console.error("Failed to boot workspace indices:", error);
-      }
-    }
-    loadActiveWorkspaceData();
-  }, []);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container || currentChannelMessages.length === 0) return;
-
-    // 1. GRAVITY ZONE CHECK: Determine if reader is lingering near the bottom (within 400px)
-    const distanceFromBottom =
-      container.scrollHeight - container.scrollTop - container.clientHeight;
-    const isUserAtBottom = distanceFromBottom <= 400;
-
-    // 2. CHECK THE SENDER: Did the current profile user type the latest message?
-    const latestMessage =
-      currentChannelMessages[currentChannelMessages.length - 1];
-    const amISender =
-      (latestMessage?.senderId || latestMessage?.userId) === session.user.id;
-
-    // 3. EXECUTE SMOOTH ALIGNMENT: Smooth scroll down if you sent it OR if you're actively following live chat at the bottom
-    if (amISender || isUserAtBottom) {
-      container.scrollTo({
-        top: container.scrollHeight,
-        behavior: "smooth", // Enforces a beautiful, hardware-accelerated glide animation
-      });
-    }
-    // Otherwise, the user is high up reading logs, so their screen stays perfectly frozen!
-  }, [currentChannelMessages.length, activeChannelId, session.user.id]);
+  useWorkspaceScrollAndSync({
+    session,
+    activeChannelId,
+    currentChannelMessages,
+    setChannelsList,
+    setUsersList,
+    containerRef,
+  });
 
   const handleChannelSelect = async (channel: SidebarItem) => {
     if (isRoomLoading.current === channel.id) return;
