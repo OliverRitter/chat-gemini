@@ -142,7 +142,20 @@ export function SidebarLayout({
         </div>
       </div>
 
-      <div className="pt-4 border-t border-zinc-800 mt-auto shrink-0">
+      {/* Inside src/components/SidebarLayout.tsx bottom layout wrapper layer: */}
+      <div className="pt-4 border-t border-zinc-800 mt-auto space-y-2 shrink-0">
+        {/* 🌟 NATIVE ROLE FILTER GATEWAY */}
+        {session?.user?.role === "admin" && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => window.location.assign("/admin/users")}
+            className="w-full bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-800 text-xs py-2 h-auto transition-colors font-medium"
+          >
+            🛡️ Admin Dashboard
+          </Button>
+        )}
+
         <Button
           variant="outline"
           size="sm"

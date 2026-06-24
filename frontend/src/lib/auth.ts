@@ -53,6 +53,15 @@ export const auth = betterAuth({
       console.log(`✅ Verification email successfully sent to: ${user.email}`);
     },
   },
+  user: {
+    additionalFields: {
+      role: {
+        type: "string",
+        required: false,
+        defaultValue: "user", // Automatically defaults new accounts to user roles safely
+      },
+    },
+  },
 
   // 3. PASSWORD HANDLERS
   emailAndPassword: {
