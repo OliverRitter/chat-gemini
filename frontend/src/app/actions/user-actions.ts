@@ -67,15 +67,6 @@ export async function getDirectoryData() {
       );
   }
 
-  // Fallback: If you have zero active chats yet, show the first 5 workspace members
-  if (conversationPartners.length === 0) {
-    conversationPartners = await db.query.users.findMany({
-      where: ne(users.id, currentUserId),
-      columns: { id: true, name: true, email: true },
-      limit: 5,
-    });
-  }
-
   // D. Sanitize and format name outputs nicely
   const cleanedUsers = conversationPartners.map((u) => {
     let cleanName = u.name ? u.name.trim() : "";
@@ -215,7 +206,7 @@ export async function getChannelMessages(channelId: string, page: number = 0) {
   });
   if (!session) throw new Error("Unauthorized");
 
-  const pageSize = 30;
+  const pageSize = 10;
   const calculatedOffset = page * pageSize;
 
   const history = await db.query.messages.findMany({
@@ -223,7 +214,6 @@ export async function getChannelMessages(channelId: string, page: number = 0) {
     orderBy: [desc(messages.createdAt)],
     limit: pageSize,
     offset: calculatedOffset,
-    // 🟩 FIXED: Changed 'user' to 'sender' to perfectly match your schema relation name!
     with: {
       sender: {
         columns: {

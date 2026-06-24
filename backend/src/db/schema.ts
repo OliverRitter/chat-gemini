@@ -9,6 +9,9 @@ import {
   boolean,
 } from "drizzle-orm/pg-core";
 
+// ==========================================
+// 1. AUTHENTICATION TABLES (Better-Auth Compatible)
+// ==========================================
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -54,6 +57,34 @@ export const accounts = pgTable("accounts", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
+// ==========================================
+// 2. CHAT & GROUP ARCHITECTURE (ADDED MISSING)
+// ==========================================
+export const channels = pgTable("channels", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  isGroup: boolean("is_group").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const channelMembers = pgTable(
+  "channel_members",
+  {
+    channelId: uuid("channel_id")
+      .notNull()
+      .references(() => channels.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: varchar("role", { length: 20 }).default("member").notNull(),
+    joinedAt: timestamp("joined_at").defaultNow().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.channelId, table.userId] })],
+);
+
+// ==========================================
+// 3. MESSAGES & MEDIA STORAGE
+// ==========================================
 export const messages = pgTable("messages", {
   id: uuid("id").defaultRandom().primaryKey(),
   channelId: uuid("channel_id")
@@ -64,4 +95,41 @@ export const messages = pgTable("messages", {
     .references(() => users.id, { onDelete: "cascade" }),
   content: text("content").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const attachments = pgTable("attachments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  messageId: uuid("message_id").references(() => messages.id, {
+    onDelete: "cascade",
+  }),
+  cloudinaryPublicId: text("cloudinary_public_id").notNull(),
+  fileUrl: text("file_url").notNull(),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// ==========================================
+// 4. USER READ MARKERS (ADDED MISSING)
+// ==========================================
+export const readMarkers = pgTable(
+  "read_markers",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    channelId: uuid("channel_id")
+      .notNull()
+      .references(() => channels.id, { onDelete: "cascade" }),
+    lastReadAt: timestamp("last_read_at").defaultNow().notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.channelId] })],
+);
+
+export const verifications = pgTable("verification", {
+  id: text("id").primaryKey(),
+  identifier: text("identifier").notNull(),
+  value: text("value").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at"),
+  updatedAt: timestamp("updated_at"),
 });

@@ -86,8 +86,6 @@ io.on("connection", (socket: Socket) => {
 
   // 🚀 HIGH-PERFORMANCE REUSABLE PRESENCE BROADCASTER
   // Calculates who is inside this specific channel and alerts all active members in it
-  // 🚀 HIGH-PERFORMANCE REUSABLE PRESENCE BROADCASTER (100% Database-Free!)
-  // Scans active memory sockets inside this specific room and maps user IDs cleanly.
   const broadcastWorkspacePresence = () => {
     try {
       // Extract all user IDs that currently have an active socket session running in memory
@@ -154,18 +152,13 @@ io.on("connection", (socket: Socket) => {
         // Access the raw data rows safely from the Postgres database engine result instance
         const validMembers = rawMembersResult.rows || [];
 
-        if (validMembers.length > 0) {
-          validMembers.forEach((member: any) => {
-            // Direct-route the data package to each user's permanent private account socket room
-            const targetRecipient = member?.userId;
-            if (targetRecipient) {
-              io.to(targetRecipient).emit("message_received", messagePayload);
-            }
-          });
-        } else {
-          // Fallback option if no database connection rows exist yet
-          io.to(channelId).emit("message_received", messagePayload);
-        }
+        validMembers.forEach((member: any) => {
+          // Direct-route the data package to each user's permanent private account socket room
+          const targetRecipient = member?.userId;
+          if (targetRecipient) {
+            io.to(targetRecipient).emit("message_received", messagePayload);
+          }
+        });
       } catch (err) {
         console.error("Failed to process message transit payload:", err);
       }
@@ -182,10 +175,9 @@ io.on("connection", (socket: Socket) => {
         console.log(
           `👤 User [${senderName}] completely offline (All devices disconnected safely)`,
         );
-
-        // 🚀 UPDATED: Alerts everyone instantly that this user went offline
-        broadcastWorkspacePresence();
       }
+      // 🚀 UPDATED: Alerts everyone instantly that this user went offline
+      broadcastWorkspacePresence();
     }
   });
 });

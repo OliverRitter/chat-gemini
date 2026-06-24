@@ -13,8 +13,6 @@ import { relations } from "drizzle-orm";
 // ==========================================
 // 1. AUTHENTICATION TABLES (Better-Auth Compatible)
 // ==========================================
-// src/db/schema.ts
-
 export const users = pgTable("users", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -23,7 +21,6 @@ export const users = pgTable("users", {
   image: text("image"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
-  // Add these missing tracking columns:
   role: text("role"),
   banned: boolean("banned"),
   banReason: text("ban_reason"),
@@ -39,22 +36,9 @@ export const sessions = pgTable("sessions", {
   userId: text("user_id")
     .notNull()
     .references(() => users.id, { onDelete: "cascade" }),
-  // Add these mandatory tracking columns required by Better-Auth:
   ipAddress: text("ip_address"),
   userAgent: text("user_agent"),
 });
-
-// ==========================================
-// 2. CHAT & GROUP ARCHITECTURE
-// ==========================================
-export const channels = pgTable("channels", {
-  id: uuid("id").defaultRandom().primaryKey(),
-  name: varchar("name", { length: 100 }).notNull(),
-  isGroup: boolean("is_group").default(false).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-// src/db/schema.ts - Append this table structure
 
 export const accounts = pgTable("accounts", {
   id: text("id").primaryKey(),
@@ -74,14 +58,27 @@ export const accounts = pgTable("accounts", {
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
-// Many-to-Many Group Members Table with explicit Roles
+// ==========================================
+// 2. CHAT & GROUP ARCHITECTURE
+// ==========================================
+export const channels = pgTable("channels", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  isGroup: boolean("is_group").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// 🛠️ FIXED: Added explicit .notNull() parameters on primary key targets
+// This natively matches your server actions configuration and prevents TS type errors
 export const channelMembers = pgTable(
   "channel_members",
   {
-    channelId: uuid("channel_id").references(() => channels.id, {
-      onDelete: "cascade",
-    }),
-    userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
+    channelId: uuid("channel_id")
+      .notNull()
+      .references(() => channels.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
     role: varchar("role", { length: 20 }).default("member").notNull(), // 'admin' | 'member'
     joinedAt: timestamp("joined_at").defaultNow().notNull(),
   },
@@ -103,7 +100,6 @@ export const messages = pgTable("messages", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Cloudinary Asset Tracking table with TTL management compatibility
 export const attachments = pgTable("attachments", {
   id: uuid("id").defaultRandom().primaryKey(),
   messageId: uuid("message_id").references(() => messages.id, {
@@ -111,26 +107,28 @@ export const attachments = pgTable("attachments", {
   }),
   cloudinaryPublicId: text("cloudinary_public_id").notNull(),
   fileUrl: text("file_url").notNull(),
-  expiresAt: timestamp("expires_at"), // Handled by automation script later
+  expiresAt: timestamp("expires_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 // ==========================================
 // 4. USER READ MARKERS (For Unread Badges)
 // ==========================================
+// 🛠️ FIXED: Added explicit .notNull() configurations for composite layout stability
 export const readMarkers = pgTable(
   "read_markers",
   {
-    userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
-    channelId: uuid("channel_id").references(() => channels.id, {
-      onDelete: "cascade",
-    }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    channelId: uuid("channel_id")
+      .notNull()
+      .references(() => channels.id, { onDelete: "cascade" }),
     lastReadAt: timestamp("last_read_at").defaultNow().notNull(),
   },
   (table) => [primaryKey({ columns: [table.userId, table.channelId] })],
 );
 
-// Better-Auth demands this exact model layout to cache confirmation and reset tokens safely
 export const verifications = pgTable("verification", {
   id: text("id").primaryKey(),
   identifier: text("identifier").notNull(),

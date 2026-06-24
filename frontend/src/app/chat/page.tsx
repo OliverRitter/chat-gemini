@@ -52,7 +52,6 @@ function ConnectedWorkspace({ session }: { session: any }) {
   const setActiveChannel = useChatStore((state) => state.setActiveChannel);
   const setInitialMessages = useChatStore((state) => state.setInitialMessages);
   const presenceByChannel = useChatStore((state) => state.presenceByChannel);
-
   const onlineUserIds = useChatStore(
     (state) => state.onlineUserIds || EMPTY_MESSAGES_ARRAY,
   );
@@ -80,13 +79,7 @@ function ConnectedWorkspace({ session }: { session: any }) {
   const [activeRoomTitle, setActiveRoomTitle] = useState("");
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  // Inside function ConnectedWorkspace({ session }) inside src/app/chat/page.tsx:
-
-  // 🚀 TRUE CONCURRENT THROTTLE FLAG: Prevents overlapping network calls
-  // const isFetchingHistory = useRef(false);
   const isRoomLoading = useRef<string | null>(null);
-
-  // Inside function ConnectedWorkspace({ session }) { ... in src/app/chat/page.tsx
 
   // 🚀 ATOMIC MUTATION LOCK: Strictly prevents parallel historical over-fetches
   const isFetchingPage = useRef(false);
@@ -165,30 +158,23 @@ function ConnectedWorkspace({ session }: { session: any }) {
   ]);
 
   useEffect(() => {
-    async function loadWorkspaceData() {
+    async function loadActiveWorkspaceData() {
       try {
         const data = await getDirectoryData();
+        if (data) {
+          setChannelsList(data.channels || []);
 
-        // 1. Set the channels list safely
-        setChannelsList(data.channels || []);
-
-        // 🚀 THE FINAL BUG FIX:
-        // Do not use the manual .map((u) => ...) loop here anymore!
-        // Passing the server data array directly guarantees that your freshly
-        // sanitized, clean usernames are saved into state without getting overwritten.
-        setUsersList(data.users || []);
-      } catch (err) {
-        console.error(
-          "Critical sidebar workspace initialization failure:",
-          err,
-        );
+          // 🌟 THE FIX: Only populate users they actually have active conversations with!
+          // Your backend 'getDirectoryData' should be scoped to existing relationships.
+          setUsersList(data.users || []);
+        }
+      } catch (error) {
+        console.error("Failed to boot workspace indices:", error);
       }
     }
-    loadWorkspaceData();
+    loadActiveWorkspaceData();
   }, []);
 
-  // Instant scroll snap down on every incoming text layout shift
-  // Look for this exact useEffect block inside src/app/chat/page.tsx:
   useEffect(() => {
     const container = containerRef.current;
     if (!container || currentChannelMessages.length === 0) return;
@@ -225,7 +211,7 @@ function ConnectedWorkspace({ session }: { session: any }) {
     setHasMoreMessages(true);
 
     try {
-      const history = await getChannelMessages(channel.id, 0); // 👈 Explicitly fetch ONLY freshest 30 messages
+      const history = await getChannelMessages(channel.id, 0);
       console.log({ history });
       setInitialMessages(channel.id, history || []);
     } catch (err) {
@@ -255,7 +241,6 @@ function ConnectedWorkspace({ session }: { session: any }) {
     }
   };
 
-  // 🔑 PASTE THIS EXTRACTED CODE BLOCK HERE TO RESTORE THE FUNCTION:
   const handleCreateChannel = async () => {
     const name = prompt("Enter new channel name:");
     if (!name || !name.trim()) return;
@@ -339,7 +324,6 @@ function ConnectedWorkspace({ session }: { session: any }) {
           </div>
 
           {/* DIRECT MESSAGES LAYER */}
-          {/* 🛠️ ADDED: HIGH-PERFORMANCE USER DIRECTORY SEARCH LAYER */}
 
           <div>
             <div className="px-1 mb-3">
