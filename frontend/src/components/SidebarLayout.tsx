@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
-
+import { useRouter } from "next/navigation";
 interface SidebarItem {
   id: string;
   name: string;
@@ -42,6 +42,7 @@ export function SidebarLayout({
   handleUserSelect,
   handleCreateChannel,
 }: SidebarLayoutProps) {
+  const router = useRouter();
   return (
     <aside className="w-64 h-full border-r border-zinc-800 bg-zinc-950 p-4 flex flex-col justify-between shrink-0 relative">
       <div className="space-y-6 overflow-y-auto flex-1 pr-1">
@@ -149,7 +150,8 @@ export function SidebarLayout({
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => window.location.assign("/admin/users")}
+            // 🚀 THE FINAL PIECE: Replaced window.location.assign with clean client-side routing
+            onClick={() => router.push("/admin/users")}
             className="w-full bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white border-zinc-800 text-xs py-2 h-auto transition-colors font-medium"
           >
             🛡️ Admin Dashboard

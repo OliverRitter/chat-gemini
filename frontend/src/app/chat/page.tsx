@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { authClient } from "@/lib/auth-client";
 import { useSocketSync } from "@/hooks/use-socket-sync";
 import { useChatStore } from "@/store/use-chat-store";
@@ -11,9 +11,9 @@ import { MessageCanvasLayout } from "@/components/MessageCanvasLayout";
 import { useDirectorySearch } from "@/hooks/use-directory-search";
 import { useInfiniteScroll } from "@/hooks/use-infinite-scroll";
 import { useWorkspaceScrollAndSync } from "@/hooks/use-workspace-scroll-and-sync";
-import { createGlobalChannel } from "@/app/actions/user-actions";
-import { getOrCreateDirectMessageChannel } from "@/app/actions/dm-actions";
 import { getChannelMessages } from "@/app/actions/chat-actions";
+import { getOrCreateDirectMessageChannel } from "@/app/actions/dm-actions";
+import { createGlobalChannel } from "@/app/actions/user-actions";
 
 interface SidebarItem {
   id: string;
@@ -28,14 +28,14 @@ export default function ChatDashboardPage() {
 
   if (isPending) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center text-sm text-muted-foreground bg-zinc-900">
-        Validating profiles...
+      <div className="flex h-screen w-screen items-center justify-center text-sm text-zinc-500 bg-zinc-900">
+        Validating user profiles...
       </div>
     );
   }
   if (!session) {
     return (
-      <div className="flex h-screen w-screen items-center justify-center text-sm text-muted-foreground bg-zinc-900">
+      <div className="flex h-screen w-screen items-center justify-center text-sm text-zinc-500 bg-zinc-900">
         Access Denied. Please log in.
       </div>
     );
@@ -51,15 +51,11 @@ function ConnectedWorkspace({ session }: { session: any }) {
   const setInitialMessages = useChatStore((state) => state.setInitialMessages);
   const presenceByChannel = useChatStore((state) => state.presenceByChannel);
   const messagesByChannel = useChatStore((state) => state.messagesByChannel);
-  const prependHistoricalMessages = useChatStore(
-    (state) => state.prependHistoricalMessages,
-  );
   const onlineUserIds = useChatStore(
     (state) => state.onlineUserIds || EMPTY_MESSAGES_ARRAY,
   );
 
   // Zustand Store flags added for safe scroll monitoring
-  const isUserScrolledUp = useChatStore((state) => state.isUserScrolledUp);
   const setIsUserScrolledUp = useChatStore(
     (state) => state.setIsUserScrolledUp,
   );
@@ -89,7 +85,7 @@ function ConnectedWorkspace({ session }: { session: any }) {
     ? messagesByChannel[activeChannelId] || EMPTY_MESSAGES_ARRAY
     : EMPTY_MESSAGES_ARRAY;
 
-  // Custom Hooks Extraction Wiring Matrices
+  // Custom Extracted Hooks Matrix Wiring
   useDirectorySearch({
     channelSearchQuery,
     userSearchQuery,
@@ -116,7 +112,6 @@ function ConnectedWorkspace({ session }: { session: any }) {
     setChannelsList,
     setUsersList,
     containerRef,
-    setShowNewMessageBadge,
   });
 
   // Action Event Helpers
@@ -245,7 +240,7 @@ function ConnectedWorkspace({ session }: { session: any }) {
               scrollToBottomViewport={scrollToBottomViewport}
               handleScrollTracking={handleScrollTracking}
               hasMoreMessages={hasMoreMessages}
-              activeChannelId={activeChannelId} // 🚀 VERIFY THIS PROPERTY MATCHES HERE
+              activeChannelId={activeChannelId}
             />
 
             <div className="p-4 border-t border-zinc-800 shrink-0 bg-zinc-950 w-full">

@@ -1,35 +1,35 @@
-// src/store/use-chat-store.ts
 import { create } from "zustand";
-import { Socket } from "socket.io-client";
 
-export interface Message {
+interface ChatMessage {
   id: string;
   channelId: string;
   senderId: string;
-  senderName?: string;
+  senderName: string;
   content: string;
   createdAt: string;
 }
 
 interface ChatState {
   activeChannelId: string | null;
-  messagesByChannel: Record<string, Message[]>;
-  socket: Socket | null;
+  messagesByChannel: Record<string, ChatMessage[]>;
+  socket: any | null;
+  presenceByChannel: Record<string, string[]>;
   onlineUserIds: string[];
-  presenceByChannel: Record<string, string[]>; // 🟩 ADDED MISSING INTERFACE KEY
+  isUserScrolledUp: boolean;
+  typingByChannel: Record<string, string[]>;
+
+  // Actions mutators
   setActiveChannel: (channelId: string | null) => void;
-  addMessage: (channelId: string, message: Message) => void;
-  setInitialMessages: (channelId: string, messages: Message[]) => void;
+  setInitialMessages: (channelId: string, messages: ChatMessage[]) => void;
   prependHistoricalMessages: (
     channelId: string,
-    oldMessages: Message[],
+    historicalMessages: ChatMessage[],
   ) => void;
-  setRoomPresence: (channelId: string, userIds: string[]) => void; // 🟩 ADDED MISSING METHOD TYPE
-  setSocket: (socket: Socket | null) => void;
-  setOnlineUsers: (userIds: string[]) => void;
-  isUserScrolledUp: boolean;
+  addMessage: (channelId: string, message: ChatMessage) => void;
+  setSocket: (socketInstance: any) => void;
+  setRoomPresence: (channelId: string, onlineUserIds: string[]) => void;
+  setOnlineUsers: (onlineIds: string[]) => void;
   setIsUserScrolledUp: (scrolledUp: boolean) => void;
-  typingByChannel: Record<string, string[]>; // channelId -> array of names (e.g. ["Lisa"])
   setTypingStatus: (channelId: string, typingUsers: string[]) => void;
 }
 
@@ -37,33 +37,12 @@ export const useChatStore = create<ChatState>((set) => ({
   activeChannelId: null,
   messagesByChannel: {},
   socket: null,
-  presenceByChannel: {}, // Now perfectly type-checked
+  presenceByChannel: {},
   onlineUserIds: [],
   isUserScrolledUp: false,
   typingByChannel: {},
-  setTypingStatus: (channelId, typingUsers) =>
-    set((state) => ({
-      typingByChannel: {
-        ...state.typingByChannel,
-        [channelId]: typingUsers,
-      },
-    })),
-  setIsUserScrolledUp: (scrolledUp) => set({ isUserScrolledUp: scrolledUp }),
+
   setActiveChannel: (channelId) => set({ activeChannelId: channelId }),
-  setOnlineUsers: (userIds) => set({ onlineUserIds: userIds }),
-
-  addMessage: (channelId, message) =>
-    set((state) => {
-      const existing = state.messagesByChannel[channelId] || [];
-      if (existing.some((m) => m.id === message.id)) return state;
-
-      return {
-        messagesByChannel: {
-          ...state.messagesByChannel,
-          [channelId]: [...existing, message],
-        },
-      };
-    }),
 
   setInitialMessages: (channelId, messages) =>
     set((state) => ({
@@ -73,29 +52,49 @@ export const useChatStore = create<ChatState>((set) => ({
       },
     })),
 
-  prependHistoricalMessages: (channelId, oldMessages) =>
+  prependHistoricalMessages: (channelId, historicalMessages) =>
     set((state) => {
-      const existing = state.messagesByChannel[channelId] || [];
-      const uniqueOldMessages = oldMessages.filter(
-        (oldMsg) => !existing.some((m) => m.id === oldMsg.id),
-      );
-
+      const current = state.messagesByChannel[channelId] || [];
       return {
         messagesByChannel: {
           ...state.messagesByChannel,
-          [channelId]: [...uniqueOldMessages, ...existing],
+          [channelId]: [...historicalMessages, ...current],
         },
       };
     }),
 
-  setRoomPresence: (channelId, userIds) =>
-    set((state: any) => ({
-      // Cast state to any here or let Zustand infer it
+  addMessage: (channelId, message) =>
+    set((state) => {
+      const current = state.messagesByChannel[channelId] || [];
+      // Prevent duplicate rendering tracking
+      if (current.some((m) => m.id === message.id)) return state;
+      return {
+        messagesByChannel: {
+          ...state.messagesByChannel,
+          [channelId]: [...current, message],
+        },
+      };
+    }),
+
+  setSocket: (socketInstance) => set({ socket: socketInstance }),
+
+  setRoomPresence: (channelId, onlineUserIds) =>
+    set((state) => ({
       presenceByChannel: {
         ...state.presenceByChannel,
-        [channelId]: userIds,
+        [channelId]: onlineUserIds,
       },
     })),
 
-  setSocket: (socket) => set({ socket }),
+  setOnlineUsers: (onlineIds) => set({ onlineUserIds: onlineIds }),
+
+  setIsUserScrolledUp: (scrolledUp) => set({ isUserScrolledUp: scrolledUp }),
+
+  setTypingStatus: (channelId, typingUsers) =>
+    set((state) => ({
+      typingByChannel: {
+        ...state.typingByChannel,
+        [channelId]: typingUsers,
+      },
+    })),
 }));
