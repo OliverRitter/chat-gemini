@@ -245,6 +245,7 @@ function ConnectedWorkspace({ session }: { session: any }) {
               scrollToBottomViewport={scrollToBottomViewport}
               handleScrollTracking={handleScrollTracking}
               hasMoreMessages={hasMoreMessages}
+              activeChannelId={activeChannelId} // 🚀 VERIFY THIS PROPERTY MATCHES HERE
             />
 
             <div className="p-4 border-t border-zinc-800 shrink-0 bg-zinc-950 w-full">

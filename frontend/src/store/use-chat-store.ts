@@ -29,6 +29,8 @@ interface ChatState {
   setOnlineUsers: (userIds: string[]) => void;
   isUserScrolledUp: boolean;
   setIsUserScrolledUp: (scrolledUp: boolean) => void;
+  typingByChannel: Record<string, string[]>; // channelId -> array of names (e.g. ["Lisa"])
+  setTypingStatus: (channelId: string, typingUsers: string[]) => void;
 }
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -38,6 +40,14 @@ export const useChatStore = create<ChatState>((set) => ({
   presenceByChannel: {}, // Now perfectly type-checked
   onlineUserIds: [],
   isUserScrolledUp: false,
+  typingByChannel: {},
+  setTypingStatus: (channelId, typingUsers) =>
+    set((state) => ({
+      typingByChannel: {
+        ...state.typingByChannel,
+        [channelId]: typingUsers,
+      },
+    })),
   setIsUserScrolledUp: (scrolledUp) => set({ isUserScrolledUp: scrolledUp }),
   setActiveChannel: (channelId) => set({ activeChannelId: channelId }),
   setOnlineUsers: (userIds) => set({ onlineUserIds: userIds }),

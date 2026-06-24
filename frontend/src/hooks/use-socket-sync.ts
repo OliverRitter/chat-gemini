@@ -54,11 +54,21 @@ export function useSocketSync() {
       console.log("📡 [Socket] Received online user list payload:", onlineIds);
       useChatStore.getState().setOnlineUsers(onlineIds);
     });
+    socketInstance.on(
+      "typing_status_changed",
+      (data: { channelId: string; typingUsers: string[] }) => {
+        // Pass the incoming real-time names array directly into your updated Zustand store
+        useChatStore
+          .getState()
+          .setTypingStatus(data.channelId, data.typingUsers || []);
+      },
+    );
 
     return () => {
       socketInstance.off("message_received");
       socketInstance.off("room_presence_update");
       socketInstance.off("workspace_presence_update");
+      socketInstance.off("typing_status_changed");
       socketInstance.disconnect();
       setSocket(null);
     };

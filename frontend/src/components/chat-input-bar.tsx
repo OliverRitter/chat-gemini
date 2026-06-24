@@ -18,7 +18,45 @@ export function ChatInputBar({ activeChannelId }: ChatInputBarProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const pickerRef = useRef<HTMLDivElement | null>(null);
 
+  // 🚀 ATOMIC REFS ADDED TO DEBOUNCE KEYSTROKE SOCKET EMISSIONS
+  const isTypingRef = useRef(false);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   const socket = useChatStore((state) => state.socket);
+
+  // 🚀 THE CENTRAL TYPING EMITTER FUNCTION
+  const emitTypingNotification = (isCurrentlyTyping: boolean) => {
+    if (!socket || !activeChannelId) return;
+
+    // Guard Clause: Only hit the websocket link if the state boundary crosses!
+    if (isTypingRef.current !== isCurrentlyTyping) {
+      isTypingRef.current = isCurrentlyTyping;
+      socket.emit("typing_update", {
+        channelId: activeChannelId,
+        isTyping: isCurrentlyTyping,
+      });
+    }
+  };
+
+  // 🚀 INTERCEPT TEXT VALUE CHANGES FOR ACTIVE DEBOUNCED MONITORING
+  const handleTextChange = (textValue: string) => {
+    setTypedMessage(textValue);
+
+    if (textValue.trim().length > 0) {
+      emitTypingNotification(true);
+
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+
+      // Cooldown timer window: If they stop typing for 3 seconds, turn off the indicator
+      typingTimeoutRef.current = setTimeout(() => {
+        emitTypingNotification(false);
+      }, 3000);
+    } else {
+      // If the field becomes completely empty, clear indicators immediately
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      emitTypingNotification(false);
+    }
+  };
 
   // Close the popup picker automatically if a user clicks outside of it
   useEffect(() => {
@@ -38,6 +76,21 @@ export function ChatInputBar({ activeChannelId }: ChatInputBarProps) {
     };
   }, [showEmojiPicker]);
 
+  // 🚀 HOUSEKEEPING PROTECTION EFFECT:
+  // Instantly turns off indicators if a user hops rooms or unmounts while mid-sentence
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      if (socket && activeChannelId && isTypingRef.current) {
+        socket.emit("typing_update", {
+          channelId: activeChannelId,
+          isTyping: false,
+        });
+      }
+      isTypingRef.current = false;
+    };
+  }, [activeChannelId, socket]);
+
   const handleSendMessage = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!socket) return;
@@ -47,6 +100,11 @@ export function ChatInputBar({ activeChannelId }: ChatInputBarProps) {
       channelId: activeChannelId,
       content: typedMessage.trim(),
     });
+
+    // 🚀 RESET INDICATORS ON SUCCESSFUL MESSAGE TRANSMIT
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    emitTypingNotification(false);
+
     setTypedMessage("");
     setShowEmojiPicker(false);
 
@@ -55,7 +113,6 @@ export function ChatInputBar({ activeChannelId }: ChatInputBarProps) {
     }, 0);
   };
 
-  // 🚀 CLEAN EMOJI CLICK HANDLER
   const handleSelectEmoji = (emojiData: EmojiClickData) => {
     const input = inputRef.current;
     if (!input) return;
@@ -63,15 +120,14 @@ export function ChatInputBar({ activeChannelId }: ChatInputBarProps) {
     const selectionStart = input.selectionStart || 0;
     const selectionEnd = input.selectionEnd || 0;
 
-    // Insert the picked emoji directly at the cursor selection point
     const newText =
       typedMessage.substring(0, selectionStart) +
       emojiData.emoji +
       typedMessage.substring(selectionEnd);
 
-    setTypedMessage(newText);
+    // 🚀 Update text and trigger standard typing timers for emojis too
+    handleTextChange(newText);
 
-    // Maintain focus and put the cursor right after the newly inserted character
     setTimeout(() => {
       input.focus();
       const newCursorPos = selectionStart + emojiData.emoji.length;
@@ -129,24 +185,22 @@ export function ChatInputBar({ activeChannelId }: ChatInputBarProps) {
       onSubmit={handleSendMessage}
       className="p-4 border-t border-zinc-800 flex items-center gap-2 bg-zinc-950 w-full shrink-0 relative"
     >
-      {/* 🚀 FLOATING PORTAL PICKER INTERFACE (Kept isolated and out of line) */}
       {showEmojiPicker && (
         <div
           ref={pickerRef}
           className="absolute bottom-20 left-4 z-50 shadow-2xl"
         >
           <EmojiPicker
-            theme={Theme.DARK} // Enforces premium dark-mode styling matches
+            theme={Theme.DARK}
             onEmojiClick={handleSelectEmoji}
             searchPlaceholder="Search emojis..."
             width={320}
             height={400}
-            skinTonesDisabled={true} // Simplifies UI panel layout footprints
+            skinTonesDisabled={true}
           />
         </div>
       )}
 
-      {/* TOGGLE PICKER BUTTON */}
       <button
         type="button"
         disabled={isUploading}
@@ -156,7 +210,6 @@ export function ChatInputBar({ activeChannelId }: ChatInputBarProps) {
         😀
       </button>
 
-      {/* MEDIA MEDIA FILE INPUT ATTACHMENT */}
       <label
         className={`cursor-pointer bg-zinc-900 hover:bg-zinc-800 text-zinc-200 px-4 py-2 rounded-md text-sm font-medium border border-zinc-800 transition-colors select-none flex items-center justify-center min-w-[40px] h-[38px] ${isUploading ? "opacity-40 pointer-events-none" : ""}`}
       >
@@ -171,7 +224,6 @@ export function ChatInputBar({ activeChannelId }: ChatInputBarProps) {
         />
       </label>
 
-      {/* CHAT CHAT TEXT FIELD */}
       <input
         ref={inputRef}
         type="text"
@@ -180,7 +232,7 @@ export function ChatInputBar({ activeChannelId }: ChatInputBarProps) {
         }
         value={typedMessage}
         disabled={isUploading}
-        onChange={(e) => setTypedMessage(e.target.value)}
+        onChange={(e) => handleTextChange(e.target.value)} // 🚀 INTERCEPT KEYSTROKE CHANGES SAFELY
         className="flex-1 min-w-0 bg-zinc-900 border border-zinc-800 rounded-md px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 focus:outline-none focus:border-zinc-700 transition-colors"
       />
 

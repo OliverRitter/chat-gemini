@@ -21,6 +21,7 @@ const io = new Server(httpServer, {
 
 // User to active device socket set registration registry cache mapping
 const userDeviceRegistry = new Map<string, Set<string>>();
+const typingRoomsRegistry = new Map<string, Map<string, string>>();
 
 // =========================================================================
 // SECURITY MIDDLEWARE: Handshake Verification via Neon Sessions Lookup
@@ -77,33 +78,130 @@ io.on("connection", (socket: Socket) => {
   console.log(
     `📡 Secure Socket Established: User [${senderName}] (${userId}) linked on [${socket.id}]`,
   );
+
+  // 🚀 REAL-TIME TYPING UPDATES RECEIVER
+  socket.on(
+    "typing_update",
+    (data: { channelId: string; isTyping: boolean }) => {
+      try {
+        const { channelId, isTyping } = data;
+        if (!channelId) return;
+
+        // Initialize map for this room if it doesn't exist
+        if (!typingRoomsRegistry.has(channelId)) {
+          typingRoomsRegistry.set(channelId, new Map());
+        }
+
+        const roomMap = typingRoomsRegistry.get(channelId)!;
+
+        if (isTyping) {
+          // Record this user as typing
+          roomMap.set(userId, senderName);
+        } else {
+          // Remove this user from the typing list
+          roomMap.delete(userId);
+        }
+
+        // Clean up empty room maps to prevent memory leaks
+        if (roomMap.size === 0) {
+          typingRoomsRegistry.delete(channelId);
+        }
+
+        // Convert map values to an array of strings to broadcast
+        const currentTypingUsers = roomMap ? Array.from(roomMap.values()) : [];
+
+        // Broadcast the list of names back to everyone in the room EXCEPT the sender
+        socket.to(channelId).emit("typing_status_changed", {
+          channelId,
+          typingUsers: currentTypingUsers, // Example: ["Lisa"] or ["John", "Lisa"]
+        });
+      } catch (err) {
+        console.error("Failed to process typing state transit:", err);
+      }
+    },
+  );
+
   socket.join(userId);
+
   // Device Mapping Layer initialization
   if (!userDeviceRegistry.has(userId)) {
     userDeviceRegistry.set(userId, new Set());
   }
   userDeviceRegistry.get(userId)!.add(socket.id);
 
-  // 🚀 HIGH-PERFORMANCE REUSABLE PRESENCE BROADCASTER
   // Calculates who is inside this specific channel and alerts all active members in it
-  const broadcastWorkspacePresence = () => {
+  // =========================================================================
+  // SCOPED PRESENCE BROADCASTER (Replace your old broadcastWorkspacePresence)
+  // =========================================================================
+  const broadcastWorkspacePresence = async (targetSocket = null) => {
     try {
-      // Extract all user IDs that currently have an active socket session running in memory
-      const onlineUserIds = Array.from(userDeviceRegistry.keys());
+      // 1. Get a list of ALL user IDs currently online across the entire machine infrastructure
+      const globalOnlineUserIds = Array.from(userDeviceRegistry.keys());
 
-      // Broadcast this simple string array to EVERYONE authenticated on the server
-      // Since it only contains active user IDs, the data package remains incredibly light!
-      io.emit("workspace_presence_update", onlineUserIds);
+      // Optimization: If a specific socket triggered this (like joining), update just them first to save bandwidth
+      if (targetSocket) {
+        const activeUserId = targetSocket.data.userId;
+
+        // Fetch only the direct message channel IDs this user belongs to
+        const rawConnectedPartners = await db.execute(
+          sql`SELECT DISTINCT user_id as "partnerId" 
+            FROM channel_members 
+            WHERE channel_id IN (
+              SELECT channel_id FROM channel_members WHERE user_id = ${activeUserId}
+            ) AND user_id != ${activeUserId}`,
+        );
+
+        const connectedUserIds = (rawConnectedPartners.rows || []).map(
+          (r) => r.partnerId,
+        );
+
+        // Filter global online users to ONLY include people they actually talk to
+        const customOnlineList = globalOnlineUserIds.filter((id) =>
+          connectedUserIds.includes(id),
+        );
+
+        targetSocket.emit("workspace_presence_update", customOnlineList);
+        return;
+      }
+
+      // 2. Full System Re-evaluation: Loop through every active device link to distribute scoped data
+      for (const [
+        activeUserId,
+        deviceSockets,
+      ] of userDeviceRegistry.entries()) {
+        // Pull partners this specific user shares channels with
+        const rawConnectedPartners = await db.execute(
+          sql`SELECT DISTINCT user_id as "partnerId" 
+            FROM channel_members 
+            WHERE channel_id IN (
+              SELECT channel_id FROM channel_members WHERE user_id = ${activeUserId}
+            ) AND user_id != ${activeUserId}`,
+        );
+
+        const connectedUserIds = (rawConnectedPartners.rows || []).map(
+          (r) => r.partnerId,
+        );
+        const customOnlineList = globalOnlineUserIds.filter((id) =>
+          connectedUserIds.includes(id),
+        );
+
+        // Emit securely to each of the user's active device threads
+        deviceSockets.forEach((socketId) => {
+          io.to(socketId).emit("workspace_presence_update", customOnlineList);
+        });
+      }
     } catch (err) {
-      console.error("Failed to broadcast workspace presence update:", err);
+      console.error(
+        "Failed to distribute scoped workspace presence updates:",
+        err,
+      );
     }
   };
 
-  // Update your connection and room navigation hooks to call our new method:
-  // 1. Alert everyone the moment a user establishes a socket line connection
+  // Alert everyone the moment a user establishes a socket line connection
   broadcastWorkspacePresence();
 
-  // 🚀 ROOM NAVIGATION LISTENERS
+  // ROOM NAVIGATION LISTENERS
   socket.on("join_channel", (channelId: string) => {
     socket.join(channelId);
     console.log(`👤 User [${senderName}] joined channel room [${channelId}]`);
@@ -142,18 +240,13 @@ io.on("connection", (socket: Socket) => {
           createdAt: insertedMessage.createdAt.toISOString(),
         };
 
-        // 🟩 THE ABSOLUTE REPAIR: Run a raw SQL query execution parameter string!
-        // This reads the raw Postgres strings directly, bypassing the Drizzle object schema compilation
-        // completely so it can NEVER crash your node process with a Symbol columns error again.
         const rawMembersResult = await db.execute(
           sql`SELECT user_id as "userId" FROM channel_members WHERE channel_id = ${channelId}`,
         );
 
-        // Access the raw data rows safely from the Postgres database engine result instance
         const validMembers = rawMembersResult.rows || [];
 
         validMembers.forEach((member: any) => {
-          // Direct-route the data package to each user's permanent private account socket room
           const targetRecipient = member?.userId;
           if (targetRecipient) {
             io.to(targetRecipient).emit("message_received", messagePayload);
@@ -165,7 +258,7 @@ io.on("connection", (socket: Socket) => {
     },
   );
 
-  // SECURE DEVICE LIFECYCLE DISCONNECTION HARVESTER
+  // 🚀 SECURE DISCONNECTION HARVESTER WITH AUTO-TYPING CLEANUP
   socket.on("disconnect", () => {
     const deviceSet = userDeviceRegistry.get(userId);
     if (deviceSet) {
@@ -175,8 +268,22 @@ io.on("connection", (socket: Socket) => {
         console.log(
           `👤 User [${senderName}] completely offline (All devices disconnected safely)`,
         );
+
+        // 🌟 CRITICAL REPAIR: Wipe typing history flags across all rooms if user closes application entirely
+        typingRoomsRegistry.forEach((roomMap, channelId) => {
+          if (roomMap.has(userId)) {
+            roomMap.delete(userId);
+            const currentTypingUsers = Array.from(roomMap.values());
+            socket.to(channelId).emit("typing_status_changed", {
+              channelId,
+              typingUsers: currentTypingUsers,
+            });
+            if (roomMap.size === 0) {
+              typingRoomsRegistry.delete(channelId);
+            }
+          }
+        });
       }
-      // 🚀 UPDATED: Alerts everyone instantly that this user went offline
       broadcastWorkspacePresence();
     }
   });
