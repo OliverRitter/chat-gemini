@@ -186,3 +186,30 @@ export async function toggleUserRoleAdmin(
     .where(eq(users.id, targetUserId));
   return { success: true, updatedRole: nextRole };
 }
+
+export async function deleteUserAccountAdmin(
+  adminUserId: string,
+  targetUserId: string,
+) {
+  // 1. Security check: verify the requester is actually an admin
+  const requestingAdmin = await db.query.users.findFirst({
+    where: eq(users.id, adminUserId),
+    columns: { role: true },
+  });
+
+  if (!requestingAdmin || requestingAdmin.role !== "admin") {
+    throw new Error("Unauthorized: Administrative privileges required.");
+  }
+
+  // 2. Prevent self-deletion
+  if (targetUserId === adminUserId) {
+    throw new Error(
+      "Operation Blocked: You cannot delete your own administrative account.",
+    );
+  }
+
+  // 3. Execute the atomic deletion (foreign keys will cascade delete related data)
+  await db.delete(users).where(eq(users.id, targetUserId));
+
+  return { success: true };
+}

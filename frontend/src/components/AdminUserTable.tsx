@@ -15,6 +15,7 @@ interface AdminUserTableProps {
   isProcessingId: string | null;
   session: any;
   handleToggleRoleClick: (userId: string, currentRole: string | null) => void;
+  handleDeleteUserClick: (userId: string) => void; // 🚀 ADDED PROP METHOD
 }
 
 export function AdminUserTable({
@@ -23,10 +24,11 @@ export function AdminUserTable({
   isProcessingId,
   session,
   handleToggleRoleClick,
+  handleDeleteUserClick, // 🚀 READ PROP HERE
 }: AdminUserTableProps) {
   return (
     <div className="border border-zinc-800 bg-zinc-950/40 rounded-lg overflow-x-auto shadow-xl">
-      <table className="w-full text-left min-w-[600px]">
+      <table className="w-full text-left min-w-[700px]">
         <thead>
           <tr className="border-b border-zinc-800 bg-zinc-950 text-xs font-semibold text-zinc-400 uppercase tracking-wider">
             <th className="p-4">User ID</th>
@@ -66,22 +68,34 @@ export function AdminUserTable({
                 </span>
               </td>
               <td className="p-4 text-center">
-                <button
-                  type="button"
-                  onClick={() => handleToggleRoleClick(user.id, user.role)}
-                  disabled={
-                    isProcessingId !== null || user.id === session.user.id
-                  }
-                  className={`text-xs font-bold px-3 py-1.5 rounded transition-all min-w-[130px] uppercase tracking-wider ${user.id === session.user.id ? "bg-zinc-900 text-zinc-600 border border-zinc-800/40 cursor-not-allowed shadow-none" : user.role === "admin" ? "bg-zinc-900 hover:bg-zinc-800 text-red-400 border border-zinc-800" : "bg-blue-600 hover:bg-blue-500 text-white"}`}
-                >
-                  {isProcessingId === user.id
-                    ? "Writing..."
-                    : user.id === session.user.id
-                      ? "Active Self"
+                <div className="flex items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleToggleRoleClick(user.id, user.role)}
+                    disabled={
+                      isProcessingId !== null || user.id === session.user.id
+                    }
+                    className={`text-xs font-bold px-3 py-1.5 rounded transition-all min-w-[100px] uppercase tracking-wider ${user.id === session.user.id ? "bg-zinc-900 text-zinc-600 border border-zinc-800/40 cursor-not-allowed shadow-none" : user.role === "admin" ? "bg-zinc-900 hover:bg-zinc-800 text-red-400 border border-zinc-800" : "bg-blue-600 hover:bg-blue-500 text-white"}`}
+                  >
+                    {isProcessingId === user.id
+                      ? "Writing..."
                       : user.role === "admin"
                         ? "Demote"
                         : "Promote"}
-                </button>
+                  </button>
+
+                  {/* 🚀 NEW DELETE BUTTON */}
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteUserClick(user.id)}
+                    disabled={
+                      isProcessingId !== null || user.id === session.user.id
+                    }
+                    className={`text-xs font-bold px-3 py-1.5 rounded transition-all uppercase tracking-wider ${user.id === session.user.id ? "bg-zinc-900 text-zinc-600 border border-zinc-800/40 cursor-not-allowed shadow-none" : "bg-red-950/40 hover:bg-red-900 text-red-400 border border-red-900/30"}`}
+                  >
+                    Delete
+                  </button>
+                </div>
               </td>
             </tr>
           ))}

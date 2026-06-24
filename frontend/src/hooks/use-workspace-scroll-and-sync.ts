@@ -17,9 +17,10 @@ interface UseWorkspaceScrollAndSyncProps {
   setChannelsList: React.Dispatch<React.SetStateAction<SidebarItem[]>>;
   setUsersList: React.Dispatch<React.SetStateAction<SidebarItem[]>>;
   containerRef: MutableRefObject<HTMLDivElement | null>;
-  setShowNewMessageBadge: (show: boolean) => void;
+  setShowNewMessageBadge: (show: boolean) => void; // Locked type
 }
 
+// 🚀 FIXED HEADER SIGNATURE: Must read variables as an object parameter package!
 export function useWorkspaceScrollAndSync({
   session,
   activeChannelId,
@@ -29,7 +30,7 @@ export function useWorkspaceScrollAndSync({
   containerRef,
   setShowNewMessageBadge,
 }: UseWorkspaceScrollAndSyncProps) {
-  // 1. Initial Data Synchronization
+  // 1. Directory Initializer List Setup
   useEffect(() => {
     async function loadActiveWorkspaceData() {
       const data = await getDirectoryData().catch(() => null);
@@ -41,7 +42,7 @@ export function useWorkspaceScrollAndSync({
     loadActiveWorkspaceData();
   }, [setChannelsList, setUsersList]);
 
-  // 2. 🚀 STABLE REAL-TIME CHANNEL SCROLL SYNC
+  // 2. Real-Time Tracking Loop
   useEffect(() => {
     const container = containerRef.current;
     if (!container || currentChannelMessages.length === 0) return;
@@ -53,26 +54,29 @@ export function useWorkspaceScrollAndSync({
     const isInitialRoomLoad =
       currentChannelMessages.length <= 15 && container.scrollTop === 0;
 
-    // Read the stable scroll tracking status directly from the Zustand store slice
     const userIsScrolledUp = useChatStore.getState().isUserScrolledUp;
 
     if (isInitialRoomLoad) {
       container.scrollTop = container.scrollHeight;
-      setShowNewMessageBadge(false);
+      if (typeof setShowNewMessageBadge === "function") {
+        setShowNewMessageBadge(false);
+      }
       useChatStore.getState().setIsUserScrolledUp(false);
       return;
     }
 
     if (amISender || !userIsScrolledUp) {
-      // Automatically slide view down if you typed it or are active at the bottom
       container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
-      setShowNewMessageBadge(false);
+      if (typeof setShowNewMessageBadge === "function") {
+        setShowNewMessageBadge(false);
+      }
     } else {
-      // 🌟 RELIABLE BADGE TRIGGER: Someone else typed while your Zustand flag is set to scrolled up!
-      setShowNewMessageBadge(true);
+      if (typeof setShowNewMessageBadge === "function") {
+        setShowNewMessageBadge(true);
+      }
     }
   }, [
-    currentChannelMessages.length,
+    currentChannelMessages,
     activeChannelId,
     session.user.id,
     containerRef,

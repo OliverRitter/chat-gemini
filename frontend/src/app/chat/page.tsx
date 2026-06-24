@@ -112,6 +112,7 @@ function ConnectedWorkspace({ session }: { session: any }) {
     setChannelsList,
     setUsersList,
     containerRef,
+    setShowNewMessageBadge,
   });
 
   // Action Event Helpers
