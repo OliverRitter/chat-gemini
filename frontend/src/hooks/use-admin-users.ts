@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   getAdminUsersDirectory,
   toggleUserRoleAdmin,
@@ -33,68 +33,67 @@ export function useAdminUsers(session: any) {
   const [minMessageCount, setMinMessageCount] = useState(0);
   const [createdAfter, setCreatedAfter] = useState("");
 
-  // 🚀 NEW: RE-ORDERING STATES TRACKED IN MEMORY
   const [sortByField, setSortByField] = useState("createdAt");
   const [sortDirection, setSortDirection] = useState("desc");
 
-  const isInitialMount = useRef(true);
   const adminId = session?.user?.id;
+  const isAdmin = session?.user?.role === "admin";
 
-  const fetchUsers = async (
-    cursor: string | null = null,
-    direction: "next" | "prev" = "next",
-  ) => {
-    if (!adminId) return;
-    setIsLoading(true);
-    try {
-      const result = await getAdminUsersDirectory({
-        adminUserId: adminId,
-        queryText: searchFilter,
-        authProvider,
-        emailVerified,
-        minMessageCount,
-        createdAfter,
-        cursor,
-        direction,
-        pageSize: 2,
-        sortByField,
-        sortDirection, // 🚀 PASS VARIABLES
-      });
-      setUserRecords(result.users);
-      setTotalCount(result.totalCount);
-      setFlags({ hasNext: result.hasMoreNext, hasPrev: result.hasMorePrev });
-      setCursors({
-        next: result.nextCursorToken,
-        prev: result.prevCursorToken,
-      });
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const fetchUsers = useCallback(
+    async (
+      cursor: string | null = null,
+      direction: "next" | "prev" = "next",
+    ) => {
+      if (!adminId || !isAdmin) return;
+      setIsLoading(true);
+      try {
+        const result = await getAdminUsersDirectory({
+          adminUserId: adminId,
+          queryText: searchFilter,
+          authProvider,
+          emailVerified,
+          minMessageCount,
+          createdAfter,
+          cursor,
+          direction,
+          pageSize: 2,
+          sortByField,
+          sortDirection,
+        });
+        setUserRecords(result.users);
+        setTotalCount(result.totalCount);
+        setFlags({ hasNext: result.hasMoreNext, hasPrev: result.hasMorePrev });
+        setCursors({
+          next: result.nextCursorToken,
+          prev: result.prevCursorToken,
+        });
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [
+      adminId,
+      isAdmin,
+      searchFilter,
+      authProvider,
+      emailVerified,
+      minMessageCount,
+      createdAfter,
+      sortByField,
+      sortDirection,
+    ],
+  );
 
   useEffect(() => {
-    if (adminId && session?.user?.role === "admin") fetchUsers(null, "next");
-  }, [adminId]);
+    if (!adminId || !isAdmin) return;
 
-  // Inside src/hooks/use-admin-users.ts - Look at your second useEffect debouncer loop:
-
-  useEffect(() => {
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
-    }
-    if (!adminId) return;
-
-    // 🚀 STABILITY ADJUSTMENT: When filters or sort column rules shift,
-    // force a reset to page 1 by clearing cursors completely!
     const delayDebounce = setTimeout(() => {
       fetchUsers(null, "next");
     }, 400);
 
     return () => clearTimeout(delayDebounce);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     searchFilter,
     authProvider,
@@ -104,6 +103,8 @@ export function useAdminUsers(session: any) {
     sortByField,
     sortDirection,
     adminId,
+    isAdmin,
+    fetchUsers,
   ]);
 
   const toggleRole = async (userId: string, currentRole: string | null) => {

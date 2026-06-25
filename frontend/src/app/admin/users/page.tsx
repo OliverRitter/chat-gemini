@@ -53,21 +53,9 @@ export default function AdminUsersDirectoryPage() {
 
         {/* 🚀 FIXED PROPS MAPPING LAYER PASSING NEW RE-ORDERING TOKENS */}
         <AdminFilterPanel
-          searchFilter={state.searchFilter}
-          setSearchFilter={actions.setSearchFilter}
-          authProvider={state.authProvider}
-          setAuthProvider={actions.setAuthProvider}
-          emailVerified={state.emailVerified}
-          setEmailVerified={actions.setEmailVerified}
-          minMessageCount={state.minMessageCount}
-          setMinMessageCount={actions.setMinMessageCount}
-          createdAfter={state.createdAfter}
-          setCreatedAfter={actions.setCreatedAfter}
-          sortByField={state.sortByField}
-          setSortByField={actions.setSortByField} // 🚀 ADDED
-          sortDirection={state.sortDirection}
-          setSortDirection={actions.setSortDirection} // 🚀 ADDED
-          triggerSearch={(key, val) => actions.fetchUsers(null, "next")}
+          {...state}
+          {...actions}
+          triggerSearch={() => actions.fetchUsers(null, "next")}
         />
 
         <AdminUserTable
