@@ -52,11 +52,7 @@ export default function AdminUsersDirectoryPage() {
         </div>
 
         {/* 🚀 FIXED PROPS MAPPING LAYER PASSING NEW RE-ORDERING TOKENS */}
-        <AdminFilterPanel
-          {...state}
-          {...actions}
-          triggerSearch={() => actions.fetchUsers(null, "next")}
-        />
+        <AdminFilterPanel {...state} {...actions} />
 
         <AdminUserTable
           userRecords={state.userRecords}
