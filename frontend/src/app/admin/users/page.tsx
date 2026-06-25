@@ -11,14 +11,11 @@ export default function AdminUsersDirectoryPage() {
   const router = useRouter();
   const { data: session, isPending } = authClient.useSession();
 
-  // Extract all states and handlers cleanly out of your custom hook
   const { state, actions } = useAdminUsers(session);
 
-  // Simple security routing route guard check
   useEffect(() => {
-    if (!isPending && (!session || session.user.role !== "admin")) {
+    if (!isPending && (!session || session.user.role !== "admin"))
       router.replace("/chat");
-    }
   }, [session, isPending, router]);
 
   if (isPending || !session || !session.user || session.user.role !== "admin") {
@@ -32,7 +29,6 @@ export default function AdminUsersDirectoryPage() {
   return (
     <div className="min-h-screen w-full bg-zinc-900 text-zinc-100 p-8 overflow-y-auto font-sans antialiased select-none">
       <div className="max-w-6xl mx-auto space-y-6">
-        {/* RETURN WORKSPACE NAVIGATION BUTTON LINK */}
         <button
           type="button"
           onClick={() => router.push("/chat")}
@@ -41,7 +37,6 @@ export default function AdminUsersDirectoryPage() {
           💬 Return to Chat Workspace
         </button>
 
-        {/* HEADER AREA */}
         <div className="flex justify-between items-center border-b border-zinc-800 pb-4">
           <div>
             <h1 className="text-2xl font-bold text-white tracking-wide">
@@ -56,7 +51,7 @@ export default function AdminUsersDirectoryPage() {
           </span>
         </div>
 
-        {/* SEARCH AND FILTERS CONTROLS CONTROL BOARD */}
+        {/* 🚀 FIXED PROPS MAPPING LAYER PASSING NEW RE-ORDERING TOKENS */}
         <AdminFilterPanel
           searchFilter={state.searchFilter}
           setSearchFilter={actions.setSearchFilter}
@@ -68,10 +63,13 @@ export default function AdminUsersDirectoryPage() {
           setMinMessageCount={actions.setMinMessageCount}
           createdAfter={state.createdAfter}
           setCreatedAfter={actions.setCreatedAfter}
+          sortByField={state.sortByField}
+          setSortByField={actions.setSortByField} // 🚀 ADDED
+          sortDirection={state.sortDirection}
+          setSortDirection={actions.setSortDirection} // 🚀 ADDED
           triggerSearch={(key, val) => actions.fetchUsers(null, "next")}
         />
 
-        {/* DIRECTORY REUSABLE GRID TABLES COMPONENT */}
         <AdminUserTable
           userRecords={state.userRecords}
           isLoading={state.isLoading}
@@ -81,7 +79,6 @@ export default function AdminUsersDirectoryPage() {
           handleDeleteUserClick={actions.deleteUser}
         />
 
-        {/* BACK AND NEXT BUTTON PAGINATION SECTION */}
         <div className="flex items-center justify-between pt-4 border-t border-zinc-800/40">
           <button
             type="button"
@@ -91,25 +88,22 @@ export default function AdminUsersDirectoryPage() {
               state.isLoading ||
               state.userRecords.length === 0
             }
-            className="bg-zinc-950 border border-zinc-800 text-zinc-300 hover:text-white px-4 py-2 rounded-md text-xs font-semibold disabled:opacity-30 transition-all min-w-[90px] uppercase tracking-wider select-none"
+            className="bg-zinc-950 border border-zinc-800 text-zinc-300 hover:text-white px-4 py-2 rounded-md text-xs font-semibold disabled:opacity-30 transition-all min-w-[90px] uppercase tracking-wider"
           >
             ◀ Back
           </button>
-
           <span className="text-xs font-medium text-zinc-600">
             Stable Condition Matrices Workspace Labs
           </span>
-
           <button
             type="button"
-            // 🚀 FIXED: Point directly to actions handler and state properties cleanly
             onClick={() => actions.fetchUsers(state.cursors.next, "next")}
             disabled={
               !state.flags.hasNext ||
               state.isLoading ||
               state.userRecords.length === 0
             }
-            className="bg-zinc-950 border border-zinc-800 text-zinc-300 hover:text-white px-4 py-2 rounded-md text-xs font-semibold disabled:opacity-30 transition-all min-w-[90px] uppercase tracking-wider select-none"
+            className="bg-zinc-950 border border-zinc-800 text-zinc-300 hover:text-white px-4 py-2 rounded-md text-xs font-semibold disabled:opacity-30 transition-all min-w-[90px] uppercase tracking-wider"
           >
             Next ▶
           </button>

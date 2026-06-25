@@ -33,6 +33,10 @@ export function useAdminUsers(session: any) {
   const [minMessageCount, setMinMessageCount] = useState(0);
   const [createdAfter, setCreatedAfter] = useState("");
 
+  // 🚀 NEW: RE-ORDERING STATES TRACKED IN MEMORY
+  const [sortByField, setSortByField] = useState("createdAt");
+  const [sortDirection, setSortDirection] = useState("desc");
+
   const isInitialMount = useRef(true);
   const adminId = session?.user?.id;
 
@@ -53,6 +57,8 @@ export function useAdminUsers(session: any) {
         cursor,
         direction,
         pageSize: 2,
+        sortByField,
+        sortDirection, // 🚀 PASS VARIABLES
       });
       setUserRecords(result.users);
       setTotalCount(result.totalCount);
@@ -72,22 +78,31 @@ export function useAdminUsers(session: any) {
     if (adminId && session?.user?.role === "admin") fetchUsers(null, "next");
   }, [adminId]);
 
+  // Inside src/hooks/use-admin-users.ts - Look at your second useEffect debouncer loop:
+
   useEffect(() => {
     if (isInitialMount.current) {
       isInitialMount.current = false;
       return;
     }
     if (!adminId) return;
+
+    // 🚀 STABILITY ADJUSTMENT: When filters or sort column rules shift,
+    // force a reset to page 1 by clearing cursors completely!
     const delayDebounce = setTimeout(() => {
       fetchUsers(null, "next");
     }, 400);
+
     return () => clearTimeout(delayDebounce);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     searchFilter,
     authProvider,
     emailVerified,
     minMessageCount,
     createdAfter,
+    sortByField,
+    sortDirection,
     adminId,
   ]);
 
@@ -140,6 +155,8 @@ export function useAdminUsers(session: any) {
       emailVerified,
       minMessageCount,
       createdAfter,
+      sortByField,
+      sortDirection,
     },
     actions: {
       setSearchFilter,
@@ -147,6 +164,8 @@ export function useAdminUsers(session: any) {
       setEmailVerified,
       setMinMessageCount,
       setCreatedAfter,
+      setSortByField,
+      setSortDirection,
       fetchUsers,
       toggleRole,
       deleteUser,
