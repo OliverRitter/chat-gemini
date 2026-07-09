@@ -3,13 +3,18 @@ import { createServer } from "http";
 import { Server, Socket } from "socket.io";
 import dotenv from "dotenv";
 import { db } from "./db/index.js";
-import { eq, and, sql } from "drizzle-orm"; // 🟩 Ensure 'sql' is imported here
+import { eq, sql } from "drizzle-orm";
 
-import { sessions, messages, users, channelMembers } from "./db/schema.js";
+// 🟩 FIX: Import the entire schema as an object to stop "not defined" ReferenceErrors
+import * as schema from "./db/schema.js";
+
 dotenv.config();
 
 const app = express();
 const httpServer = createServer(app);
+
+// Standard body parser middleware
+app.use(express.json());
 
 const io = new Server(httpServer, {
   cors: {
@@ -19,67 +24,144 @@ const io = new Server(httpServer, {
   },
 });
 
-// User to active device socket set registration registry cache mapping
 const userDeviceRegistry = new Map<string, Set<string>>();
 const typingRoomsRegistry = new Map<string, Map<string, string>>();
 
-// =========================================================================
-// SECURITY MIDDLEWARE: Handshake Verification via Neon Sessions Lookup
-// =========================================================================
+// Secure Authentication Token Handshake Interceptor
 io.use(async (socket: Socket, next) => {
   try {
-    const token = socket.handshake.auth.token || socket.handshake.query.token;
+    const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+
+    console.log(
+      `🔌 [Handshake] Socket session link attempt from ID: ${socket.id}`,
+    );
 
     if (!token || typeof token !== "string") {
-      return next(
-        new Error("Authentication failed: Missing token header footprint"),
+      console.error(
+        `❌ [Handshake Error] Rejected ${socket.id}: Token string is missing or malformed.`,
       );
+      return next(new Error("Authentication failed: Missing token footprint"));
     }
 
-    // A. Find the valid session row directly
+    // Lookup validation token using the fresh schema binding wrapper
     const sessionResult = await db.query.sessions.findFirst({
-      where: eq(sessions.token, token),
+      where: eq(schema.sessions.token, token),
     });
 
-    // 🚀 THE GOOGLE LOGIN FIX: Safely reject the handshake instead of crashing the server process!
-    if (!sessionResult || new Date() > new Date(sessionResult.expiresAt)) {
-      console.warn(
-        `⚠️ Blocked unauthorized socket handshake token entry request.`,
+    if (!sessionResult) {
+      console.error(
+        `❌ [Handshake Error] Rejected ${socket.id}: Token key does not exist in sessions database table.`,
       );
       return next(
         new Error("Authentication failed: Expired or unmapped session key"),
       );
     }
 
-    // B. Fetch the user profile safely now that sessionResult is verified to exist
+    if (new Date() > new Date(sessionResult.expiresAt)) {
+      console.error(
+        `❌ [Handshake Error] Rejected ${socket.id}: Token found, but it has EXPIRED.`,
+      );
+      return next(new Error("Authentication failed: Expired session window"));
+    }
+
     const userResult = await db.query.users.findFirst({
-      where: eq(users.id, sessionResult.userId),
+      where: eq(schema.users.id, sessionResult.userId),
       columns: { name: true },
     });
 
-    // Cache records safely inside socket memory space
     socket.data.userId = sessionResult.userId;
     socket.data.senderName = userResult?.name || "Unknown User";
 
+    console.log(
+      `✅ [Handshake Success] Authenticated: "${socket.data.senderName}" (${socket.data.userId})`,
+    );
     next();
   } catch (error) {
-    console.error("Critical Socket Handshake Interception Interrupted:", error);
+    console.error(
+      "💥 [Handshake Crash] Critical intercept pipeline failure:",
+      error,
+    );
     next(new Error("Internal Authentication Validation Pipeline Crash"));
   }
 });
 
-// =========================================================================
-// CORE REAL-TIME PIPELINES
-// =========================================================================
-io.on("connection", (socket: Socket) => {
+io.on("connection", async (socket: Socket) => {
   const userId = socket.data.userId as string;
   const senderName = socket.data.senderName as string;
 
   console.log(
-    `📡 Secure Socket Established: User [${senderName}] (${userId}) linked on [${socket.id}]`,
+    `📡 [Connection Active] Socket established for: "${senderName}" on line [${socket.id}]`,
   );
 
-  // 🚀 REAL-TIME TYPING UPDATES RECEIVER
+  if (!userDeviceRegistry.has(userId)) {
+    userDeviceRegistry.set(userId, new Set());
+  }
+  userDeviceRegistry.get(userId)!.add(socket.id);
+  socket.join(userId);
+
+  const getConnectedPartnerIds = async (id: string): Promise<string[]> => {
+    try {
+      const rawConnectedPartners = await db.execute(
+        sql`SELECT DISTINCT user_id as "partnerId" 
+          FROM channel_members 
+          WHERE channel_id IN (
+            SELECT channel_id FROM channel_members WHERE user_id = ${id}
+          ) AND user_id != ${id}`,
+      );
+      return (rawConnectedPartners.rows || []).map((r: any) => r.partnerId);
+    } catch (err) {
+      console.error("Failed to query partner relations:", err);
+      return [];
+    }
+  };
+
+  const emitPresenceToUser = async (
+    targetUserId: string,
+    preFetchedPartners?: string[],
+  ) => {
+    const partners =
+      preFetchedPartners || (await getConnectedPartnerIds(targetUserId));
+    const globalOnlineUserIds = Array.from(userDeviceRegistry.keys());
+    const customOnlineList = globalOnlineUserIds.filter((id) =>
+      partners.includes(id),
+    );
+    io.to(targetUserId).emit("workspace_presence_update", customOnlineList);
+  };
+
+  try {
+    const myPartners = await getConnectedPartnerIds(userId);
+    await emitPresenceToUser(userId, myPartners);
+
+    for (const partnerId of myPartners) {
+      if (userDeviceRegistry.has(partnerId)) {
+        io.to(partnerId).emit("user_online", { userId });
+      }
+    }
+  } catch (err) {
+    console.error(
+      "Failed to distribute online status on connection startup:",
+      err,
+    );
+  }
+
+  // CHANNEL MANAGEMENT SUBSCRIBERS
+  socket.on("join_channel", (channelId: string) => {
+    if (!channelId) return;
+    socket.join(channelId);
+    console.log(
+      `📥 [Room Join] Socket ${socket.id} entered channel: [${channelId}]`,
+    );
+  });
+
+  socket.on("leave_channel", (channelId: string) => {
+    if (!channelId) return;
+    socket.leave(channelId);
+    console.log(
+      `📤 [Room Leave] Socket ${socket.id} exited channel: [${channelId}]`,
+    );
+  });
+
+  // TYPING SPEED INDICATORS
   socket.on(
     "typing_update",
     (data: { channelId: string; isTyping: boolean }) => {
@@ -87,7 +169,6 @@ io.on("connection", (socket: Socket) => {
         const { channelId, isTyping } = data;
         if (!channelId) return;
 
-        // Initialize map for this room if it doesn't exist
         if (!typingRoomsRegistry.has(channelId)) {
           typingRoomsRegistry.set(channelId, new Map());
         }
@@ -95,134 +176,43 @@ io.on("connection", (socket: Socket) => {
         const roomMap = typingRoomsRegistry.get(channelId)!;
 
         if (isTyping) {
-          // Record this user as typing
           roomMap.set(userId, senderName);
         } else {
-          // Remove this user from the typing list
           roomMap.delete(userId);
         }
 
-        // Clean up empty room maps to prevent memory leaks
         if (roomMap.size === 0) {
           typingRoomsRegistry.delete(channelId);
         }
 
-        // Convert map values to an array of strings to broadcast
         const currentTypingUsers = roomMap ? Array.from(roomMap.values()) : [];
 
-        // Broadcast the list of names back to everyone in the room EXCEPT the sender
         socket.to(channelId).emit("typing_status_changed", {
           channelId,
-          typingUsers: currentTypingUsers, // Example: ["Lisa"] or ["John", "Lisa"]
+          typingUsers: currentTypingUsers,
         });
       } catch (err) {
-        console.error("Failed to process typing state transit:", err);
+        console.error("Failed to process typing status update:", err);
       }
     },
   );
 
-  socket.join(userId);
-
-  // Device Mapping Layer initialization
-  if (!userDeviceRegistry.has(userId)) {
-    userDeviceRegistry.set(userId, new Set());
-  }
-  userDeviceRegistry.get(userId)!.add(socket.id);
-
-  // Calculates who is inside this specific channel and alerts all active members in it
-  // =========================================================================
-  // SCOPED PRESENCE BROADCASTER (Replace your old broadcastWorkspacePresence)
-  // =========================================================================
-  const broadcastWorkspacePresence = async (targetSocket = null) => {
-    try {
-      // 1. Get a list of ALL user IDs currently online across the entire machine infrastructure
-      const globalOnlineUserIds = Array.from(userDeviceRegistry.keys());
-
-      // Optimization: If a specific socket triggered this (like joining), update just them first to save bandwidth
-      if (targetSocket) {
-        const activeUserId = targetSocket.data.userId;
-
-        // Fetch only the direct message channel IDs this user belongs to
-        const rawConnectedPartners = await db.execute(
-          sql`SELECT DISTINCT user_id as "partnerId" 
-            FROM channel_members 
-            WHERE channel_id IN (
-              SELECT channel_id FROM channel_members WHERE user_id = ${activeUserId}
-            ) AND user_id != ${activeUserId}`,
-        );
-
-        const connectedUserIds = (rawConnectedPartners.rows || []).map(
-          (r) => r.partnerId,
-        );
-
-        // Filter global online users to ONLY include people they actually talk to
-        const customOnlineList = globalOnlineUserIds.filter((id) =>
-          connectedUserIds.includes(id),
-        );
-
-        targetSocket.emit("workspace_presence_update", customOnlineList);
-        return;
-      }
-
-      // 2. Full System Re-evaluation: Loop through every active device link to distribute scoped data
-      for (const [
-        activeUserId,
-        deviceSockets,
-      ] of userDeviceRegistry.entries()) {
-        // Pull partners this specific user shares channels with
-        const rawConnectedPartners = await db.execute(
-          sql`SELECT DISTINCT user_id as "partnerId" 
-            FROM channel_members 
-            WHERE channel_id IN (
-              SELECT channel_id FROM channel_members WHERE user_id = ${activeUserId}
-            ) AND user_id != ${activeUserId}`,
-        );
-
-        const connectedUserIds = (rawConnectedPartners.rows || []).map(
-          (r) => r.partnerId,
-        );
-        const customOnlineList = globalOnlineUserIds.filter((id) =>
-          connectedUserIds.includes(id),
-        );
-
-        // Emit securely to each of the user's active device threads
-        deviceSockets.forEach((socketId) => {
-          io.to(socketId).emit("workspace_presence_update", customOnlineList);
-        });
-      }
-    } catch (err) {
-      console.error(
-        "Failed to distribute scoped workspace presence updates:",
-        err,
-      );
-    }
-  };
-
-  // Alert everyone the moment a user establishes a socket line connection
-  broadcastWorkspacePresence();
-
-  // ROOM NAVIGATION LISTENERS
-  socket.on("join_channel", (channelId: string) => {
-    socket.join(channelId);
-    console.log(`👤 User [${senderName}] joined channel room [${channelId}]`);
-  });
-
-  socket.on("leave_channel", (channelId: string) => {
-    socket.leave(channelId);
-    console.log(`👤 User [${senderName}] left channel room [${channelId}]`);
-  });
-
-  // CORE REAL-TIME RECEIVER PIPELINE
+  // MESSAGE HUB TRANSIT ROUTER
+  // 🟩 SYSTEMATIC FIX: Route channel messages to every member's personal user ID room
   socket.on(
     "send_message",
     async (data: { channelId: string; content: string }) => {
       try {
         const { channelId, content } = data;
-        if (!content.trim() || !channelId) return;
+        if (!content || !content.trim() || !channelId) return;
 
-        // 1. Insert the message text into your rows safely
+        console.log(
+          `✉️ [Message Received] Processing content from "${senderName}" for room [${channelId}]`,
+        );
+
+        // 1. Save the message to your database
         const [insertedMessage] = await db
-          .insert(messages)
+          .insert(schema.messages)
           .values({
             channelId: channelId,
             senderId: userId,
@@ -231,45 +221,55 @@ io.on("connection", (socket: Socket) => {
           })
           .returning();
 
+        // 2. Build the exact data payload your frontend hooks expect
         const messagePayload = {
           id: insertedMessage.id,
-          channelId: insertedMessage.channelId,
-          senderId: insertedMessage.senderId,
+          channelId: channelId,
+          senderId: userId,
           senderName: senderName,
-          content: insertedMessage.content,
-          createdAt: insertedMessage.createdAt.toISOString(),
+          content: content.trim(),
+          createdAt: new Date().toISOString(),
         };
 
-        const rawMembersResult = await db.execute(
-          sql`SELECT user_id as "userId" FROM channel_members WHERE channel_id = ${channelId}`,
+        // 3. Find all user IDs who are members of this specific channel
+        console.log(
+          `🔍 [Database Lookup] Fetching active members for channel [${channelId}]...`,
+        );
+        const channelMembersList = await db
+          .select({ memberId: schema.channelMembers.userId })
+          .from(schema.channelMembers)
+          .where(eq(schema.channelMembers.channelId, channelId));
+
+        console.log(
+          `📣 [Message Routing] Distributing payload to ${channelMembersList.length} workspace members...`,
         );
 
-        const validMembers = rawMembersResult.rows || [];
-
-        validMembers.forEach((member: any) => {
-          const targetRecipient = member?.userId;
-          if (targetRecipient) {
-            io.to(targetRecipient).emit("message_received", messagePayload);
-          }
+        // 4. LOOP through each member and emit directly to their private userId room!
+        channelMembersList.forEach((member) => {
+          // This hits the user immediately, even if they are sitting in a different chat room!
+          io.to(member.memberId).emit("message_received", messagePayload);
         });
       } catch (err) {
-        console.error("Failed to process message transit payload:", err);
+        console.error(
+          "💥 Message routing pipeline database submission failed:",
+          err,
+        );
       }
     },
   );
 
-  // 🚀 SECURE DISCONNECTION HARVESTER WITH AUTO-TYPING CLEANUP
-  socket.on("disconnect", () => {
+  // CLEANUP ON DISCONNECT
+  socket.on("disconnect", async () => {
+    console.log(
+      `🔌 [Disconnect Event] Connection offline for socket ID: ${socket.id}`,
+    );
     const deviceSet = userDeviceRegistry.get(userId);
     if (deviceSet) {
       deviceSet.delete(socket.id);
+
       if (deviceSet.size === 0) {
         userDeviceRegistry.delete(userId);
-        console.log(
-          `👤 User [${senderName}] completely offline (All devices disconnected safely)`,
-        );
 
-        // 🌟 CRITICAL REPAIR: Wipe typing history flags across all rooms if user closes application entirely
         typingRoomsRegistry.forEach((roomMap, channelId) => {
           if (roomMap.has(userId)) {
             roomMap.delete(userId);
@@ -283,8 +283,18 @@ io.on("connection", (socket: Socket) => {
             }
           }
         });
+
+        try {
+          const myPartners = await getConnectedPartnerIds(userId);
+          for (const partnerId of myPartners) {
+            if (userDeviceRegistry.has(partnerId)) {
+              io.to(partnerId).emit("user_offline", { userId });
+            }
+          }
+        } catch (err) {
+          console.error("Failed to distribute offline presence alerts:", err);
+        }
       }
-      broadcastWorkspacePresence();
     }
   });
 });

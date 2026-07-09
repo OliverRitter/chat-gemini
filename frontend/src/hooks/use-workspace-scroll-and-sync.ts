@@ -17,10 +17,9 @@ interface UseWorkspaceScrollAndSyncProps {
   setChannelsList: React.Dispatch<React.SetStateAction<SidebarItem[]>>;
   setUsersList: React.Dispatch<React.SetStateAction<SidebarItem[]>>;
   containerRef: MutableRefObject<HTMLDivElement | null>;
-  setShowNewMessageBadge: (show: boolean) => void; // Locked type
+  setShowNewMessageBadge: (show: boolean) => void;
 }
 
-// 🚀 FIXED HEADER SIGNATURE: Must read variables as an object parameter package!
 export function useWorkspaceScrollAndSync({
   session,
   activeChannelId,
@@ -30,9 +29,18 @@ export function useWorkspaceScrollAndSync({
   containerRef,
   setShowNewMessageBadge,
 }: UseWorkspaceScrollAndSyncProps) {
-  // 1. Directory Initializer List Setup
+  const isUserScrolledUp = useChatStore((state) => state.isUserScrolledUp);
+  const setIsUserScrolledUp = useChatStore(
+    (state) => state.setIsUserScrolledUp,
+  );
+
+  // 🟩 SYSTEMATIC FIX: Empty the dependency array so this ONLY fires once when you open the app!
+  // This completely stops incoming messages from destroying and recreatng your sidebar items.
   useEffect(() => {
     async function loadActiveWorkspaceData() {
+      console.log(
+        "📁 [Directory Sync] Fetching baseline workspace lists once...",
+      );
       const data = await getDirectoryData().catch(() => null);
       if (data) {
         setChannelsList(data.channels || []);
@@ -40,9 +48,9 @@ export function useWorkspaceScrollAndSync({
       }
     }
     loadActiveWorkspaceData();
-  }, [setChannelsList, setUsersList]);
+  }, []); // 💡 KEEP THIS EMPTY: Stops the endless loop!
 
-  // 2. Real-Time Tracking Loop
+  // 2. Real-Time Scroll and Tracking Loop (Remains untouched for auto-scrolling)
   useEffect(() => {
     const container = containerRef.current;
     if (!container || currentChannelMessages.length === 0) return;
@@ -50,22 +58,20 @@ export function useWorkspaceScrollAndSync({
     const latestMessage =
       currentChannelMessages[currentChannelMessages.length - 1];
     const amISender =
-      (latestMessage?.senderId || latestMessage?.userId) === session.user.id;
+      (latestMessage?.senderId || latestMessage?.userId) === session?.user?.id;
     const isInitialRoomLoad =
       currentChannelMessages.length <= 15 && container.scrollTop === 0;
-
-    const userIsScrolledUp = useChatStore.getState().isUserScrolledUp;
 
     if (isInitialRoomLoad) {
       container.scrollTop = container.scrollHeight;
       if (typeof setShowNewMessageBadge === "function") {
         setShowNewMessageBadge(false);
       }
-      useChatStore.getState().setIsUserScrolledUp(false);
+      setIsUserScrolledUp(false);
       return;
     }
 
-    if (amISender || !userIsScrolledUp) {
+    if (amISender || !isUserScrolledUp) {
       container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
       if (typeof setShowNewMessageBadge === "function") {
         setShowNewMessageBadge(false);
@@ -78,8 +84,10 @@ export function useWorkspaceScrollAndSync({
   }, [
     currentChannelMessages,
     activeChannelId,
-    session.user.id,
+    session?.user?.id,
     containerRef,
     setShowNewMessageBadge,
+    isUserScrolledUp,
+    setIsUserScrolledUp,
   ]);
 }

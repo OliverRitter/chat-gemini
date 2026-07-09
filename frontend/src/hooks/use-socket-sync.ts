@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useChatStore } from "@/store/use-chat-store";
 import { authClient } from "@/lib/auth-client";
 import { io } from "socket.io-client";
@@ -8,21 +8,31 @@ import { useNotificationStore } from "@/store/use-notification-store";
 
 export function useSocketSync() {
   const { data: session } = authClient.useSession();
-  const activeChannelId = useChatStore((state) => state.activeChannelId);
   const socket = useChatStore((state) => state.socket);
   const setSocket = useChatStore((state) => state.setSocket);
+  const activeChannelId = useChatStore((state) => state.activeChannelId);
 
-  // 🚀 EXTRACT EXPLICITLY THE UNIQUE IMMUTABLE STRING KEYS
   const sessionToken = session?.session?.token || (session as any)?.token;
 
-  // =========================================================================
-  // HOOK 1: Stable Connection Instance Lifecycle (Runs exactly ONCE per token)
-  // =========================================================================
+  // Track the channel using a simple ref to avoid stale closure bugs
+  const activeChannelRef = useRef<string | null>(null);
+
+  // 🟩 FIXED SUBSCRIPTION: Standard vanilla Zustand state listener loop
   useEffect(() => {
-    // Guard Clause: Block if the string doesn't exist yet
+    // Set the initial value manually to avoid passing multi-argument options
+    activeChannelRef.current = useChatStore.getState().activeChannelId;
+
+    const unsubscribe = useChatStore.subscribe((state) => {
+      activeChannelRef.current = state.activeChannelId;
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
     if (!sessionToken) return;
 
-    console.log("🔌 [Socket] Initializing unified secure socket line link...");
+    console.log("🔌 [Socket] Connecting unified line...");
 
     const socketInstance = io(
       process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:4000",
@@ -30,19 +40,34 @@ export function useSocketSync() {
         autoConnect: true,
         withCredentials: true,
         transports: ["websocket"],
-        auth: { token: sessionToken }, // Feed raw token string securely
+        auth: { token: sessionToken },
       },
     );
 
     setSocket(socketInstance);
-
     socketInstance.on("message_received", (payload: any) => {
-      const targetChannel = payload.channelId || payload.roomId;
-      if (targetChannel) {
+      console.log("📨 [Socket Sync Diagnostic] Raw Payload Arrived:", payload);
+
+      const targetChannel = payload.channelId || payload.channel_id;
+      const targetSender =
+        payload.senderId ||
+        payload.sender_id ||
+        payload.userId ||
+        payload.user_id;
+
+      if (!targetChannel) return;
+
+      // 🟩 THE LOGICAL FIX: Check if the user is actively viewing this channel
+      if (targetChannel === activeChannelRef.current) {
+        // CASE A: User is in the room. Keep notifications clear and inject the message onto the live screen!
+        useNotificationStore.getState().clearUnread(targetChannel);
+        useChatStore.getState().addMessage(targetChannel, payload);
+      } else {
+        // CASE B: This is a background message! ONLY increment the notification badge.
+        // DO NOT add it to the chat store here. This prevents background state changes from flushing your counts!
         useNotificationStore
           .getState()
-          .incrementUnread(targetChannel, payload.senderId);
-        useChatStore.getState().addMessage(targetChannel, payload);
+          .incrementUnread(targetChannel, targetSender);
       }
     });
 
@@ -56,8 +81,23 @@ export function useSocketSync() {
     );
 
     socketInstance.on("workspace_presence_update", (onlineIds: string[]) => {
-      console.log("📡 [Socket] Received online user list payload:", onlineIds);
       useChatStore.getState().setOnlineUsers(onlineIds);
+    });
+
+    socketInstance.on("user_online", (data: { userId: string }) => {
+      const chatState = useChatStore.getState();
+      const currentOnline = chatState.onlineUserIds || [];
+      if (!currentOnline.includes(data.userId)) {
+        chatState.setOnlineUsers([...currentOnline, data.userId]);
+      }
+    });
+
+    socketInstance.on("user_offline", (data: { userId: string }) => {
+      const chatState = useChatStore.getState();
+      const currentOnline = chatState.onlineUserIds || [];
+      chatState.setOnlineUsers(
+        currentOnline.filter((id) => id !== data.userId),
+      );
     });
 
     socketInstance.on(
@@ -70,22 +110,19 @@ export function useSocketSync() {
     );
 
     return () => {
-      console.log("🔌 [Socket] Cleaning up connection footprint gracefully...");
+      console.log("🔌 [Socket] Disconnecting cleanly...");
       socketInstance.off("message_received");
       socketInstance.off("room_presence_update");
       socketInstance.off("workspace_presence_update");
+      socketInstance.off("user_online");
+      socketInstance.off("user_offline");
       socketInstance.off("typing_status_changed");
       socketInstance.disconnect();
       setSocket(null);
     };
-
-    // 🚀 FIXED: Bind to 'sessionToken' string and 'setSocket'.
-    // Since strings are compared by value, this effect will NEVER run again while logged in!
   }, [sessionToken, setSocket]);
 
-  // =========================================================================
-  // HOOK 2: Room Switching Logic (Fast, lightweight event emission)
-  // =========================================================================
+  // Channel room stream synchronizer effect block
   useEffect(() => {
     if (!socket || !activeChannelId) return;
 

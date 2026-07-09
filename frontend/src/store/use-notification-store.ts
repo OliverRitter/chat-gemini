@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { devtools } from "zustand/middleware";
 import { useChatStore } from "./use-chat-store";
 
 interface NotificationState {
@@ -7,37 +8,54 @@ interface NotificationState {
   clearUnread: (targetId: string) => void;
 }
 
-export const useNotificationStore = create<NotificationState>((set) => ({
-  unreadCounts: {},
+export const useNotificationStore = create<NotificationState>()(
+  devtools(
+    (set) => ({
+      unreadCounts: {},
 
-  incrementUnread: (channelId, senderId) => {
-    const activeChannelId = useChatStore.getState().activeChannelId;
+      incrementUnread: (channelId, senderId) => {
+        const chatState = useChatStore.getState();
+        const activeChannelId = chatState.activeChannelId;
 
-    // GUARD: If you are already looking at this conversation room, do nothing
-    if (channelId === activeChannelId) return;
+        // Guard Clause: If the user is actively viewing this room, skip counting
+        if (channelId === activeChannelId) return;
 
-    set((state) => {
-      // 🟩 THE LOGIC RULES:
-      // If the message is a DM (the senderId is present and it is a unique person),
-      // we save the count under the sender's personal ID so the sidebar can read it.
-      // Otherwise, it is a public channel, so we save it under the channel ID.
-      const isPublicChannel = channelId.startsWith("channel_") || !senderId;
-      const trackingKey = isPublicChannel ? channelId : senderId;
+        // 🟩 SYSTEMATIC TRACE: Let's see why the math is getting reset
+        console.log("🔢 [Notification Math Check] Incoming:", {
+          channelId,
+          senderId,
+        });
 
-      return {
-        unreadCounts: {
-          ...state.unreadCounts,
-          [trackingKey]: (state.unreadCounts[trackingKey] || 0) + 1,
-        },
-      };
-    });
-  },
+        // A robust check to decide if this is a public room or a personal DM
+        const messagesMap = chatState.messagesByChannel || {};
+        const isPublicChannel = !!messagesMap[channelId] || !senderId;
+        const trackingKey = isPublicChannel ? channelId : senderId;
 
-  clearUnread: (targetId) =>
-    set((state) => ({
-      unreadCounts: {
-        ...state.unreadCounts,
-        [targetId]: 0,
+        set((state) => {
+          const nextCounts = { ...state.unreadCounts };
+
+          // 🟩 THE MATH FIX: Forcefully convert the existing value to a strict integer
+          const previousCount = Number(nextCounts[trackingKey]) || 0;
+          nextCounts[trackingKey] = previousCount + 1;
+
+          console.log(
+            `📈 [Notification Math Success] Key "${trackingKey}" went from ${previousCount} to ${nextCounts[trackingKey]}`,
+          );
+
+          return { unreadCounts: nextCounts };
+        });
       },
-    })),
-}));
+
+      clearUnread: (targetId) => {
+        set((state) => {
+          if (!state.unreadCounts[targetId]) return state;
+
+          const nextCounts = { ...state.unreadCounts };
+          nextCounts[targetId] = 0;
+          return { unreadCounts: nextCounts };
+        });
+      },
+    }),
+    { name: "NotificationStore" },
+  ),
+);

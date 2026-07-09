@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   getAdminUsersDirectory,
   toggleUserRoleAdmin,
@@ -36,7 +36,6 @@ export function useAdminUsers(session: any) {
   const [sortByField, setSortByField] = useState("createdAt");
   const [sortDirection, setSortDirection] = useState("desc");
 
-  const adminId = session?.user?.id;
   const isAdmin = session?.user?.role === "admin";
 
   const fetchUsers = useCallback(
@@ -44,11 +43,12 @@ export function useAdminUsers(session: any) {
       cursor: string | null = null,
       direction: "next" | "prev" = "next",
     ) => {
-      if (!adminId || !isAdmin) return;
+      if (!isAdmin) return;
       setIsLoading(true);
       try {
+        // FIXED: Removed administrative ID payload.
+        // The server action resolves this via headers.
         const result = await getAdminUsersDirectory({
-          adminUserId: adminId,
           queryText: searchFilter,
           authProvider,
           emailVerified,
@@ -60,6 +60,7 @@ export function useAdminUsers(session: any) {
           sortByField,
           sortDirection,
         });
+
         setUserRecords(result.users);
         setTotalCount(result.totalCount);
         setFlags({ hasNext: result.hasMoreNext, hasPrev: result.hasMorePrev });
@@ -68,13 +69,12 @@ export function useAdminUsers(session: any) {
           prev: result.prevCursorToken,
         });
       } catch (err) {
-        console.error(err);
+        console.error("Directory fetch failed:", err);
       } finally {
         setIsLoading(false);
       }
     },
     [
-      adminId,
       isAdmin,
       searchFilter,
       authProvider,
@@ -87,7 +87,7 @@ export function useAdminUsers(session: any) {
   );
 
   useEffect(() => {
-    if (!adminId || !isAdmin) return;
+    if (!isAdmin) return;
 
     const delayDebounce = setTimeout(() => {
       fetchUsers(null, "next");
@@ -102,16 +102,16 @@ export function useAdminUsers(session: any) {
     createdAfter,
     sortByField,
     sortDirection,
-    adminId,
     isAdmin,
     fetchUsers,
   ]);
 
   const toggleRole = async (userId: string, currentRole: string | null) => {
-    if (isProcessingId || !adminId) return;
+    if (isProcessingId || !isAdmin) return;
     setIsProcessingId(userId);
     try {
-      const result = await toggleUserRoleAdmin(adminId, userId, currentRole);
+      // FIXED: Matches backend signature (targetUserId, currentRole)
+      const result = await toggleUserRoleAdmin(userId, currentRole);
       setUserRecords((prev) =>
         prev.map((u) =>
           u.id === userId ? { ...u, role: result.updatedRole } : u,
@@ -127,13 +127,14 @@ export function useAdminUsers(session: any) {
   const deleteUser = async (userId: string) => {
     if (
       isProcessingId ||
-      !adminId ||
+      !isAdmin ||
       !window.confirm("Permanently delete this user?")
     )
       return;
     setIsProcessingId(userId);
     try {
-      await deleteUserAccountAdmin(adminId, userId);
+      // FIXED: Matches backend signature (targetUserId)
+      await deleteUserAccountAdmin(userId);
       setUserRecords((prev) => prev.filter((u) => u.id !== userId));
       setTotalCount((prev) => Math.max(0, prev - 1));
     } catch (err) {

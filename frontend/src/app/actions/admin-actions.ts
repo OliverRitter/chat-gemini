@@ -2,7 +2,7 @@
 
 import { db } from "@/db";
 import { users, accounts, messages } from "@/db/schema";
-import { auth } from "@/lib/auth"; // 🚀 SECURE: Import your server auth instance
+import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import {
   and,
@@ -19,10 +19,6 @@ import {
   sql,
 } from "drizzle-orm";
 
-/**
- * Validates the current server session and returns the verified admin user ID.
- * Throws an error if unauthorized to secure all admin endpoints.
- */
 async function assertAdminSession(): Promise<string> {
   const session = await auth.api.getSession({
     headers: await headers(),
@@ -42,7 +38,7 @@ export async function getAdminUsersDirectory({
   minMessageCount = 0,
   createdAfter = "",
   pageSize = 2,
-  cursor = null, // Compound token format: "value|id"
+  cursor = null,
   direction = "next",
   sortByField = "createdAt",
   sortDirection = "desc",
@@ -58,7 +54,6 @@ export async function getAdminUsersDirectory({
   sortByField?: string;
   sortDirection?: string;
 }) {
-  // 🚀 SECURE: Authentication context checked completely on the server
   await assertAdminSession();
 
   const conditions: any[] = [];
@@ -97,7 +92,7 @@ export async function getAdminUsersDirectory({
     conditions.push(inArray(users.id, activeSendersSubquery));
   }
 
-  // 🚀 Lock down total count query before applying cursor ranges
+  // Count conditions locked
   const countConditions = and(...conditions);
   const [countResult] = await db
     .select({ value: count() })
@@ -118,7 +113,7 @@ export async function getAdminUsersDirectory({
   const wantDesc = sortDirection === "desc";
   const lookOlder = (goForward && wantDesc) || (!goForward && !wantDesc);
 
-  // 🚀 SECURE: Compound Cursor Engine parsing using Drizzle safe interpolations
+  // 🚀 SECURE: Re-written Cursor logic protecting against template manipulation injection
   if (cursor && cursor.includes("|")) {
     const pipeIndex = cursor.lastIndexOf("|");
     const cursorValueStr = cursor.substring(0, pipeIndex);
@@ -168,8 +163,9 @@ export async function getAdminUsersDirectory({
   }
 
   const finalConditions = and(...conditions);
-
   const currentDirectionDesc = goForward ? wantDesc : !wantDesc;
+
+  // Enforce consistent lowercase mapping matching filter constraints
   const finalSortTarget =
     isNameSort || isEmailSort
       ? sql`LOWER(${primarySortColumn})`
@@ -212,7 +208,7 @@ export async function getAdminUsersDirectory({
     return `${baselineVal}|${userRow.id}`;
   };
 
-  // 🚀 FIXED: Dynamic Pagination State Token Handlers
+  // State mapping calculations modified for dynamic pagination paths
   const nextCursorToken = goForward
     ? hasMore
       ? makeCompoundToken(pageResults[pageResults.length - 1])
