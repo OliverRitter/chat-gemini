@@ -26,6 +26,7 @@ export function ConnectedWorkspace({ session }: { session: any }) {
   const setInitialMessages = useChatStore((state) => state.setInitialMessages);
   const presenceByChannel = useChatStore((state) => state.presenceByChannel);
   const messagesByChannel = useChatStore((state) => state.messagesByChannel);
+
   const onlineUserIds = useChatStore(
     (state) => state.onlineUserIds || EMPTY_MESSAGES_ARRAY,
   );
@@ -49,9 +50,9 @@ export function ConnectedWorkspace({ session }: { session: any }) {
   const isRoomLoading = useRef<string | null>(null);
   const isFetchingPage = useRef(false);
 
-  const currentRoomOnlineIds = activeChannelId
-    ? presenceByChannel[activeChannelId] || EMPTY_MESSAGES_ARRAY
-    : EMPTY_MESSAGES_ARRAY;
+  // const currentRoomOnlineIds = activeChannelId
+  //   ? presenceByChannel[activeChannelId] || EMPTY_MESSAGES_ARRAY
+  //   : EMPTY_MESSAGES_ARRAY;
   const currentChannelMessages = activeChannelId
     ? messagesByChannel[activeChannelId] || EMPTY_MESSAGES_ARRAY
     : EMPTY_MESSAGES_ARRAY;
@@ -201,7 +202,20 @@ export function ConnectedWorkspace({ session }: { session: any }) {
               <h1 className="font-semibold text-sm tracking-wide text-white truncate flex items-center">
                 {activeRoomTitle}
                 <span
-                  className={`h-2.5 w-2.5 rounded-full border border-zinc-950 ml-2 inline-block ${currentRoomOnlineIds.length > 1 ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]" : "bg-zinc-600"}`}
+                  className={`h-2.5 w-2.5 rounded-full border border-zinc-950 ml-2 inline-block ${
+                    // 🟩 PRECISE INLINE FIX:
+                    // 1. If it's a general channel (#), leave it green.
+                    // 2. If it's a DM (💬), search your existing usersList to find the user matching your active room title.
+                    // 3. Then, check if that specific user's ID is actually inside your onlineUserIds array!
+                    !activeRoomTitle.startsWith("💬") ||
+                    usersList.some(
+                      (user) =>
+                        activeRoomTitle.includes(user.name) &&
+                        onlineUserIds.includes(user.id),
+                    )
+                      ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]"
+                      : "bg-zinc-600"
+                  }`}
                 />
               </h1>
             </div>
