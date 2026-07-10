@@ -180,11 +180,21 @@ export function LoginForm() {
                   provider: "google",
                   callbackURL: "/chat",
                 });
-              } catch (err) {
+              } catch (err: any) {
                 console.error("OAuth loop crash:", err);
-                setServerError("Failed to initialize Google login session.");
+                // 💡 Capture network dropouts gracefully
+                if (
+                  err.message?.includes("fetch") ||
+                  !window.navigator.onLine
+                ) {
+                  setServerError(
+                    "Authentication server is unreachable. Please check your connection.",
+                  );
+                } else {
+                  setServerError("Failed to initialize Google login session.");
+                }
               } finally {
-                setLoading(false);
+                // Keep loading true if page is actively redirecting to Google
               }
             }}
             className="w-full flex items-center justify-center gap-2 bg-background hover:bg-muted border-input text-foreground h-[40px] text-sm font-semibold transition-colors"

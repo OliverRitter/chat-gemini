@@ -91,8 +91,9 @@ export function ChatInputBar({ activeChannelId }: ChatInputBarProps) {
     };
   }, [activeChannelId, socket]);
 
-  const handleSendMessage = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
+  const handleSendMessage = (e: React.FormEvent) => {
+    e.preventDefault(); // Guaranteed to run safely now!
+
     if (!socket) return;
     if (!typedMessage.trim() || !activeChannelId) return;
 
@@ -101,7 +102,7 @@ export function ChatInputBar({ activeChannelId }: ChatInputBarProps) {
       content: typedMessage.trim(),
     });
 
-    // 🚀 RESET INDICATORS ON SUCCESSFUL MESSAGE TRANSMIT
+    // RESET INDICATORS ON SUCCESSFUL MESSAGE TRANSMIT
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     emitTypingNotification(false);
 

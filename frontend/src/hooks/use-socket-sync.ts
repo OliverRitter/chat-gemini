@@ -45,15 +45,12 @@ export function useSocketSync() {
     );
 
     setSocket(socketInstance);
+
     socketInstance.on("message_received", (payload: any) => {
       console.log("📨 [Socket Sync Diagnostic] Raw Payload Arrived:", payload);
 
-      const targetChannel = payload.channelId || payload.channel_id;
-      const targetSender =
-        payload.senderId ||
-        payload.sender_id ||
-        payload.userId ||
-        payload.user_id;
+      const targetChannel = payload.channelId;
+      const targetSender = payload.senderId || payload.userId;
 
       if (!targetChannel) return;
 

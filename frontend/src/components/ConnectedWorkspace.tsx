@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useChatStore } from "@/store/use-chat-store";
 import { useNotificationStore } from "@/store/use-notification-store";
 import { ChatInputBar } from "@/components/chat-input-bar";
@@ -24,7 +24,6 @@ export function ConnectedWorkspace({ session }: { session: any }) {
   const activeChannelId = useChatStore((state) => state.activeChannelId);
   const setActiveChannel = useChatStore((state) => state.setActiveChannel);
   const setInitialMessages = useChatStore((state) => state.setInitialMessages);
-  const presenceByChannel = useChatStore((state) => state.presenceByChannel);
   const messagesByChannel = useChatStore((state) => state.messagesByChannel);
   const onlineUserIds = useChatStore(
     (state) => state.onlineUserIds || EMPTY_MESSAGES_ARRAY,
@@ -44,14 +43,14 @@ export function ConnectedWorkspace({ session }: { session: any }) {
   const [hasMoreMessages, setHasMoreMessages] = useState(true);
   const [showNewMessageBadge, setShowNewMessageBadge] = useState(false);
 
+  // Track the underlying user target ID if viewing a 1-on-1 Direct Message conversation
+  const [activePartnerId, setActivePartnerId] = useState<string | null>(null);
+
   const containerRef = useRef<HTMLDivElement | null>(null);
   const topSentinelRef = useRef<HTMLDivElement | null>(null);
   const isRoomLoading = useRef<string | null>(null);
   const isFetchingPage = useRef(false);
 
-  const currentRoomOnlineIds = activeChannelId
-    ? presenceByChannel[activeChannelId] || EMPTY_MESSAGES_ARRAY
-    : EMPTY_MESSAGES_ARRAY;
   const currentChannelMessages = activeChannelId
     ? messagesByChannel[activeChannelId] || EMPTY_MESSAGES_ARRAY
     : EMPTY_MESSAGES_ARRAY;
@@ -113,6 +112,7 @@ export function ConnectedWorkspace({ session }: { session: any }) {
     setHasMoreMessages(true);
     setShowNewMessageBadge(false);
     setIsUserScrolledUp(false);
+    setActivePartnerId(null); // Not a direct message room
     try {
       const history = await getChannelMessages(channel.id, 0);
       if (isRoomLoading.current === channel.id) {
@@ -135,13 +135,14 @@ export function ConnectedWorkspace({ session }: { session: any }) {
     setHasMoreMessages(true);
     setShowNewMessageBadge(false);
     setIsUserScrolledUp(false);
+    setActivePartnerId(user.id); // Track partner to calculate presence
     try {
       const sharedChannelId = await getOrCreateDirectMessageChannel(user.id);
       const history = await getChannelMessages(sharedChannelId, 0);
       if (isRoomLoading.current === user.id) {
         setActiveRoomTitle(`💬 ${user.name}`);
         setActiveChannel(sharedChannelId);
-        clearUnread(user.id);
+        clearUnread(sharedChannelId); // 🟩 FIXED: Clear by the channel ID, matching your socket store structure!
         setInitialMessages(sharedChannelId, history || []);
       }
     } catch (err) {
@@ -161,6 +162,12 @@ export function ConnectedWorkspace({ session }: { session: any }) {
       console.error(err);
     }
   };
+
+  // Determine if the header dot should be illuminated green
+  // If it's a DM, check if your partner is online. If it's a regular room, default it to active.
+  const isTargetRoomActive = activePartnerId
+    ? onlineUserIds.includes(activePartnerId)
+    : true;
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-zinc-900 text-zinc-100 font-sans antialiased">
@@ -187,7 +194,11 @@ export function ConnectedWorkspace({ session }: { session: any }) {
               <h1 className="font-semibold text-sm tracking-wide text-white truncate flex items-center">
                 {activeRoomTitle}
                 <span
-                  className={`h-2.5 w-2.5 rounded-full border border-zinc-950 ml-2 inline-block ${currentRoomOnlineIds.length > 1 ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]" : "bg-zinc-600"}`}
+                  className={`h-2.5 w-2.5 rounded-full border border-zinc-950 ml-2 inline-block ${
+                    isTargetRoomActive
+                      ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]"
+                      : "bg-zinc-600"
+                  }`}
                 />
               </h1>
             </div>
@@ -204,7 +215,6 @@ export function ConnectedWorkspace({ session }: { session: any }) {
               activeChannelId={activeChannelId}
             />
 
-            {/* 🟩 RESTORED: The static action input bar container handles full emoji and media layout states */}
             <div className="p-4 border-t border-zinc-800 shrink-0 bg-zinc-950 w-full">
               <ChatInputBar activeChannelId={activeChannelId} />
             </div>
@@ -214,12 +224,12 @@ export function ConnectedWorkspace({ session }: { session: any }) {
             <div className="h-12 w-12 rounded-2xl bg-zinc-800/50 flex items-center justify-center border border-zinc-700/50 mb-4">
               <span className="text-xl">👋</span>
             </div>
-            <h2 className="text-sm font-medium text-zinc-200">
-              Welcome to your Workspace
+            <h2 className="text-lg font-medium text-white mb-1">
+              No Active Chat
             </h2>
-            <p className="text-xs text-zinc-500 max-w-sm mt-1.5 leading-relaxed">
-              Select a channel or direct message from the menu bar to begin
-              real-time updates.
+            <p className="text-sm text-zinc-400 max-w-sm">
+              Select a channel or direct message from the sidebar workspace
+              directory to start communicating with your team.
             </p>
           </div>
         )}
