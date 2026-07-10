@@ -55,10 +55,21 @@ export const useChatStore = create<ChatState>((set) => ({
   prependHistoricalMessages: (channelId, historicalMessages) =>
     set((state) => {
       const current = state.messagesByChannel[channelId] || [];
+
+      // 1. Combine your historical incoming logs with your current room view logs
+      const combinedPool = [...historicalMessages, ...current];
+
+      // 2. 🚀 THE ULTIMATE DEFENSE: Filter out items with the same message ID
+      // This checks the combined pool and only keeps the very first instance of any ID,
+      // completely wiping out duplicates before they can hit your screen!
+      const uniqueList = combinedPool.filter(
+        (msg, index, self) => self.findIndex((m) => m.id === msg.id) === index,
+      );
+
       return {
         messagesByChannel: {
           ...state.messagesByChannel,
-          [channelId]: [...historicalMessages, ...current],
+          [channelId]: uniqueList,
         },
       };
     }),
@@ -66,8 +77,15 @@ export const useChatStore = create<ChatState>((set) => ({
   addMessage: (channelId, message) =>
     set((state) => {
       const current = state.messagesByChannel[channelId] || [];
-      // Prevent duplicate rendering tracking
-      if (current.some((m) => m.id === message.id)) return state;
+
+      // 🚀 STRICT STRING TRIMMING SAFETY VALVE:
+      // Drop any incoming duplicates right at the door before they mess up your view layouts!
+      if (
+        current.some((m) => String(m.id).trim() === String(message.id).trim())
+      ) {
+        return state;
+      }
+
       return {
         messagesByChannel: {
           ...state.messagesByChannel,

@@ -68,14 +68,14 @@ export function useSocketSync() {
       }
     });
 
-    socketInstance.on(
-      "room_presence_update",
-      (payload: { channelId: string; onlineUserIds: string[] }) => {
-        useChatStore
-          .getState()
-          .setRoomPresence(payload.channelId, payload.onlineUserIds);
-      },
-    );
+    // socketInstance.on(
+    //   "room_presence_update",
+    //   (payload: { channelId: string; onlineUserIds: string[] }) => {
+    //     useChatStore
+    //       .getState()
+    //       .setRoomPresence(payload.channelId, payload.onlineUserIds);
+    //   },
+    // );
 
     socketInstance.on("workspace_presence_update", (onlineIds: string[]) => {
       useChatStore.getState().setOnlineUsers(onlineIds);
